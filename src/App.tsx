@@ -1,0 +1,32 @@
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Layout } from './components/layout/Layout';
+import { LeaderboardPage } from './pages/leaderboard/LeaderboardPage';
+import { RunnersListPage } from './pages/runner/RunnersListPage';
+import { RunnerPage } from './pages/runner/RunnerPage';
+import { RacesListPage } from './pages/race/RacesListPage';
+import { RacePage } from './pages/race/RacePage';
+import { AdminPage } from './pages/admin/AdminPage';
+import { DataProvider } from './contexts/DataContext';
+
+function App() {
+  return (
+    <DataProvider>
+      <Router>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Navigate to="/leaderboard" replace />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/runners" element={<RunnersListPage />} />
+            <Route path="/runner/:id" element={<RunnerPage />} />
+            <Route path="/races" element={<RacesListPage />} />
+            <Route path="/race/:id" element={<RacePage />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="*" element={<Navigate to="/leaderboard" replace />} />
+          </Routes>
+        </Layout>
+      </Router>
+    </DataProvider>
+  );
+}
+
+export default App;
