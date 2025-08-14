@@ -43,7 +43,6 @@ apps/fe/
 - ✅ **Foreign key constraints** for data integrity
 
 ## 🔄 Database Migrations
-
 This project uses `node-pg-migrate` for managing database schema changes. All schema modifications should be done through migrations to ensure consistency across environments.
 
 ### Migration Commands:
