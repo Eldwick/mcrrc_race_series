@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Trophy, Users, Calendar, Settings } from 'lucide-react';
 import { cn } from '../../utils';

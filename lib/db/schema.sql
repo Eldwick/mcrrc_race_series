@@ -24,15 +24,13 @@ CREATE TABLE series (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Runners table: Contains information about registered runners
+-- Runners table: Contains information about registered runners (person-level info)
 CREATE TABLE runners (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  bib_number VARCHAR(10) NOT NULL UNIQUE,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
   gender gender_type NOT NULL,
-  age INTEGER NOT NULL,
-  age_group age_group_type NOT NULL,
+  birth_year INTEGER NOT NULL, -- Using birth year instead of current age
   club VARCHAR(100) DEFAULT 'MCRRC',
   email VARCHAR(255),
   phone VARCHAR(20),
@@ -40,6 +38,23 @@ CREATE TABLE runners (
   notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Series Registrations: Links runners to bib numbers per series/year
+CREATE TABLE series_registrations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  series_id UUID NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+  runner_id UUID NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
+  bib_number VARCHAR(10) NOT NULL,
+  age INTEGER NOT NULL, -- Age for this specific series/year
+  age_group age_group_type NOT NULL, -- Age group for this specific series/year
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  
+  -- Each runner can only have one bib per series
+  UNIQUE(series_id, runner_id),
+  -- Each bib can only be used once per series
+  UNIQUE(series_id, bib_number)
 );
 
 -- Races table: Contains information about individual races
@@ -63,8 +78,7 @@ CREATE TABLE races (
 CREATE TABLE race_results (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   race_id UUID NOT NULL REFERENCES races(id) ON DELETE CASCADE,
-  runner_id UUID NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
-  bib_number VARCHAR(10) NOT NULL,
+  series_registration_id UUID NOT NULL REFERENCES series_registrations(id) ON DELETE CASCADE,
   place INTEGER NOT NULL, -- overall place
   place_gender INTEGER NOT NULL, -- gender place
   place_age_group INTEGER NOT NULL, -- age group place
@@ -77,16 +91,14 @@ CREATE TABLE race_results (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   
-  -- Ensure each runner can only have one result per race
-  UNIQUE(race_id, runner_id)
+  -- Ensure each series registration can only have one result per race
+  UNIQUE(race_id, series_registration_id)
 );
 
 -- Series Standings table: Contains calculated championship series standings
 CREATE TABLE series_standings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  series_id UUID NOT NULL REFERENCES series(id) ON DELETE CASCADE,
-  runner_id UUID NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
-  year INTEGER NOT NULL,
+  series_registration_id UUID NOT NULL REFERENCES series_registrations(id) ON DELETE CASCADE,
   total_points INTEGER NOT NULL DEFAULT 0,
   races_participated INTEGER NOT NULL DEFAULT 0,
   overall_rank INTEGER,
@@ -96,8 +108,8 @@ CREATE TABLE series_standings (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   
-  -- Ensure each runner can only have one standing per series
-  UNIQUE(series_id, runner_id)
+  -- Ensure each series registration can only have one standing
+  UNIQUE(series_registration_id)
 );
 
 -- Qualifying Races table: Tracks which races count toward series standings for each runner
@@ -111,12 +123,14 @@ CREATE TABLE qualifying_races (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX idx_runners_bib_number ON runners(bib_number);
-CREATE INDEX idx_runners_gender_age_group ON runners(gender, age_group);
+CREATE INDEX idx_runners_gender ON runners(gender);
+CREATE INDEX idx_series_registrations_series_bib ON series_registrations(series_id, bib_number);
+CREATE INDEX idx_series_registrations_runner ON series_registrations(runner_id);
+CREATE INDEX idx_series_registrations_age_group ON series_registrations(age_group, gender);
 CREATE INDEX idx_races_series_date ON races(series_id, date);
-CREATE INDEX idx_race_results_race_runner ON race_results(race_id, runner_id);
+CREATE INDEX idx_race_results_race_registration ON race_results(race_id, series_registration_id);
 CREATE INDEX idx_race_results_place ON race_results(place);
-CREATE INDEX idx_series_standings_series_points ON series_standings(series_id, total_points DESC);
+CREATE INDEX idx_series_standings_registration_points ON series_standings(series_registration_id, total_points DESC);
 CREATE INDEX idx_qualifying_races_standing ON qualifying_races(standing_id);
 
 -- Create function to update the updated_at timestamp
@@ -133,6 +147,9 @@ CREATE TRIGGER update_series_updated_at BEFORE UPDATE ON series
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_runners_updated_at BEFORE UPDATE ON runners
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_series_registrations_updated_at BEFORE UPDATE ON series_registrations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_races_updated_at BEFORE UPDATE ON races
