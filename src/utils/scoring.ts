@@ -52,7 +52,7 @@ export function calculateSeriesStandings(
   results: RaceResult[],
   seriesId: string,
   year: number,
-  minRaces: number = 5,
+  _minRaces: number = 5,
   maxRaces: number = 10
 ): SeriesStanding[] {
   const standings: SeriesStanding[] = [];
@@ -134,13 +134,10 @@ export function calculateSeriesStandings(
 function applyTiebreakers(
   standingA: SeriesStanding,
   standingB: SeriesStanding,
-  runners: Runner[],
+  _runners: Runner[],
   races: Race[],
   results: RaceResult[]
 ): number {
-  const runnerA = runners.find(r => r.id === standingA.runnerId)!;
-  const runnerB = runners.find(r => r.id === standingB.runnerId)!;
-
   // T1: Head-to-head in races where both participated
   const headToHead = compareHeadToHead(standingA, standingB, races, results);
   if (headToHead !== 0) return headToHead;
@@ -170,7 +167,7 @@ function applyTiebreakers(
 function compareHeadToHead(
   standingA: SeriesStanding,
   standingB: SeriesStanding,
-  races: Race[],
+  _races: Race[],
   results: RaceResult[]
 ): number {
   const resultsA = results.filter(r => r.runnerId === standingA.runnerId);
@@ -207,7 +204,7 @@ function compareNextBestRace(
   standingA: SeriesStanding,
   standingB: SeriesStanding,
   results: RaceResult[],
-  races: Race[]
+  _races: Race[]
 ): number {
   // Get all race results for both runners, sorted by points
   const getAllRacePoints = (runnerId: string) => {

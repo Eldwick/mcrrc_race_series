@@ -2,7 +2,7 @@
 
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { type AgeGroup, AGE_GROUPS, CHAMPIONSHIP_SERIES_POINTS } from '../types';
+import { type AgeGroup, CHAMPIONSHIP_SERIES_POINTS } from '../types';
 
 /**
  * Utility for merging Tailwind CSS classes

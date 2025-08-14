@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Search, Filter, Trophy, Calendar } from 'lucide-react';
+import { Users, Search, Trophy, Calendar } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
-import { Card, CardHeader, CardTitle, CardContent, Input, Select, Badge } from '../../components/ui';
+import { Card, CardContent, Input, Select, Badge } from '../../components/ui';
 import { formatRunnerName, getRunnerInitials } from '../../utils';
 
 export function RunnersListPage() {

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Trophy, Users, Clock } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
-import { Card, CardHeader, CardTitle, CardContent, Badge } from '../../components/ui';
+import { Card, CardContent, Badge } from '../../components/ui';
 import { formatDate } from '../../utils';
 
 export function RacesListPage() {
