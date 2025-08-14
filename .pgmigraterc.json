@@ -1,0 +1,12 @@
+{
+  "database-url-var": "DATABASE_URL",
+  "migrations-dir": "migrations",
+  "dir": "migrations",
+  "direction": "up",
+  "schema": "public",
+  "lock": false,
+  "create-schema": false,
+  "single-transaction": true,
+  "no-lock": true,
+  "verbose": true
+}

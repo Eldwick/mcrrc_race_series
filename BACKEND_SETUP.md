@@ -27,7 +27,8 @@ apps/fe/
 
 ### Tables Created:
 - **series** - Race series information (2025 CS, 2026 CS, etc.)
-- **runners** - Club member roster with bib numbers
+- **runners** - Club member roster (person-level info)
+- **series_registrations** - Links runners to bib numbers per series/year
 - **races** - Individual race information 
 - **race_results** - Results for each runner per race
 - **series_standings** - Calculated championship standings
@@ -40,6 +41,35 @@ apps/fe/
 - ✅ **Time intervals** for race times (PostgreSQL native)
 - ✅ **Automatic timestamps** with triggers
 - ✅ **Foreign key constraints** for data integrity
+
+## 🔄 Database Migrations
+
+This project uses `node-pg-migrate` for managing database schema changes. All schema modifications should be done through migrations to ensure consistency across environments.
+
+### Migration Commands:
+```bash
+# Apply all pending migrations
+npm run migrate
+
+# Create a new migration
+npm run migrate:create -- migration-name
+
+# Check migration status
+npm run migrate:status
+
+# Rollback last migration
+npm run migrate:down
+
+# Test migration (rollback and reapply)
+npm run migrate:redo
+```
+
+### Initial Setup:
+The initial schema migration (`1755199033000_initial-schema`) creates all tables, indexes, and constraints. This migration should be run once after database creation.
+
+**⚠️ Important:** Always run migrations in both development and production before deploying new code that depends on schema changes.
+
+For detailed migration usage, see [MIGRATIONS.md](./MIGRATIONS.md).
 
 ## 📡 API Endpoints
 

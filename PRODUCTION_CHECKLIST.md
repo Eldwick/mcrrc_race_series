@@ -5,9 +5,14 @@
 ### ✅ Neon Database
 - [ ] Create account at https://neon.tech
 - [ ] Create project: "mcrrc-race-series"
-- [ ] Copy connection string
-- [ ] Run `lib/db/schema.sql` in Neon SQL Editor
-- [ ] Verify: `SELECT * FROM series;` shows 2025 series
+- [ ] Copy connection string to clipboard
+
+### ✅ Run Database Migrations
+- [ ] Set local environment: `DATABASE_URL="your_neon_connection_string"`
+- [ ] Run migration: `npm run migrate`
+- [ ] Verify setup in Neon console: `SELECT * FROM series;` shows 2025 series
+
+**Note:** This runs the initial schema migration which creates all tables, indexes, and seed data.
 
 ## Phase 2: Vercel Deployment (8 minutes)
 

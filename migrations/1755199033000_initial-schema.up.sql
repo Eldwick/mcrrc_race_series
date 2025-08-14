@@ -1,9 +1,5 @@
 -- MCRRC Race Series Database Schema
 -- PostgreSQL database for managing race results and standings
---
--- ⚠️ DEPRECATED: This file is kept for reference only.
--- Use database migrations instead: npm run migrate
--- See MIGRATIONS.md for details.
 
 -- Enable UUID extension for generating unique IDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
