@@ -1,5 +1,5 @@
 // Database utility functions for common operations
-import { sql } from './connection';
+import { sql } from './connection.js';
 
 export interface DbRunner {
   id: string;
