@@ -264,6 +264,7 @@ export async function getSeriesStandings(year: number, seriesId?: string): Promi
     query = sql`
       SELECT 
         ss.*,
+        r.id as runner_id,
         r.first_name,
         r.last_name,
         r.gender,
@@ -280,6 +281,7 @@ export async function getSeriesStandings(year: number, seriesId?: string): Promi
     query = sql`
       SELECT 
         ss.*,
+        r.id as runner_id,
         r.first_name,
         r.last_name,
         r.gender,
