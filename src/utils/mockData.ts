@@ -418,7 +418,8 @@ function calculateMockStandings(): SeriesStanding[] {
       year: CURRENT_YEAR,
       totalPoints,
       racesParticipated: runnerResults.length,
-      qualifyingRaces: runnerResults.length, // For mock data, use race count
+      qualifyingRacesNeeded: Math.ceil(runnerResults.length / 2), // For mock data, Q = half of races
+      qualifyingRaces,
       raceScores: [],
       updatedAt: new Date().toISOString(),
       lastCalculatedAt: new Date().toISOString(),

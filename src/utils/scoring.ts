@@ -100,7 +100,8 @@ export function calculateSeriesStandings(
       year,
       totalPoints,
       racesParticipated: runnerResults.length,
-      qualifyingRaces: Math.ceil(runnerResults.length / 2), // Q = half of races, rounded up
+      qualifyingRacesNeeded: Math.ceil(runnerResults.length / 2), // Q = half of races, rounded up
+      qualifyingRaces: countingRaces,
       raceScores: [],
       updatedAt: new Date().toISOString(),
       lastCalculatedAt: new Date().toISOString()
@@ -240,9 +241,9 @@ function compareNextBestRace(
 function compareTotalDistance(
   standingA: SeriesStanding,
   standingB: SeriesStanding,
-  races: Race[]
+  _races: Race[]
 ): number {
-  const getDistance = (standing: SeriesStanding) => {
+  const getDistance = (_standing: SeriesStanding) => {
     // TODO: Implement distance calculation with new data structure
     return 0;
   };
@@ -259,9 +260,9 @@ function compareTotalDistance(
 function compareTotalTime(
   standingA: SeriesStanding,
   standingB: SeriesStanding,
-  results: RaceResult[]
+  _results: RaceResult[]
 ): number {
-  const getTotalSeconds = (standing: SeriesStanding) => {
+  const getTotalSeconds = (_standing: SeriesStanding) => {
     // TODO: Implement total time calculation with new data structure
     return 0;
   };

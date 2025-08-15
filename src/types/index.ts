@@ -49,19 +49,7 @@ export interface RaceResult {
   updatedAt: string;
 }
 
-export interface SeriesStanding {
-  id: string;
-  seriesId: string;
-  runnerId: string;
-  year: number;
-  totalPoints: number;
-  racesParticipated: number;
-  overallRank?: number;
-  genderRank?: number;
-  ageGroupRank?: number;
-  qualifyingRaces: QualifyingRace[];
-  updatedAt: string;
-}
+// Legacy SeriesStanding interface moved and consolidated with main one below
 
 export interface QualifyingRace {
   raceId: string;
@@ -152,7 +140,8 @@ export interface SeriesStanding {
   year: number;
   // Race participation and scoring
   racesParticipated: number;
-  qualifyingRaces: number;    // Q = half of total series races, rounded up
+  qualifyingRacesNeeded: number;    // Q = half of total series races, rounded up
+  qualifyingRaces: QualifyingRace[]; // Legacy: actual qualifying races data
   raceScores: RacePoints[];   // Individual race point scores
   // Final standing calculation  
   totalPoints: number;        // Sum of Q highest race scores
@@ -163,6 +152,7 @@ export interface SeriesStanding {
   totalDistance?: number;     // T3: sum of distances of all completed races
   totalTime?: string;         // T4: sum of times of all completed races
   lastCalculatedAt: string;
+  updatedAt: string;
 }
 
 // API response types
