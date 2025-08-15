@@ -123,10 +123,9 @@ CREATE TABLE qualifying_races (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX idx_runners_gender ON runners(gender);
 CREATE INDEX idx_series_registrations_series_bib ON series_registrations(series_id, bib_number);
 CREATE INDEX idx_series_registrations_runner ON series_registrations(runner_id);
-CREATE INDEX idx_series_registrations_age_group ON series_registrations(age_group, gender);
+CREATE INDEX idx_series_registrations_age_group ON series_registrations(age_group);
 CREATE INDEX idx_races_series_date ON races(series_id, date);
 CREATE INDEX idx_race_results_race_registration ON race_results(race_id, series_registration_id);
 CREATE INDEX idx_race_results_place ON race_results(place);
