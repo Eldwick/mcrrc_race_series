@@ -530,33 +530,43 @@ async function calculateRacePointsForResult(
 ): Promise<{ overallPoints: number; ageGroupPoints: number; totalPoints: number }> {
   const sql = getSql();
 
-  // Get overall gender placement (place among all M or F)
+  // Get overall gender placement (rank among all M or F in this race)
   const overallResult = await sql`
-    SELECT 
-      ROW_NUMBER() OVER (ORDER BY rr.place) as gender_place
-    FROM race_results rr
-    JOIN series_registrations sr ON rr.series_registration_id = sr.id
-    JOIN runners r ON sr.runner_id = r.id
-    WHERE rr.race_id = ${raceId} 
-      AND r.gender = ${gender}
-      AND rr.is_dnf = false 
-      AND rr.is_dq = false
-      AND rr.series_registration_id = ${seriesRegistrationId}
+    WITH gender_rankings AS (
+      SELECT 
+        rr.series_registration_id,
+        ROW_NUMBER() OVER (ORDER BY rr.place) as gender_place
+      FROM race_results rr
+      JOIN series_registrations sr ON rr.series_registration_id = sr.id
+      JOIN runners r ON sr.runner_id = r.id
+      WHERE rr.race_id = ${raceId} 
+        AND r.gender = ${gender}
+        AND rr.is_dnf = false 
+        AND rr.is_dq = false
+    )
+    SELECT gender_place 
+    FROM gender_rankings 
+    WHERE series_registration_id = ${seriesRegistrationId}
   `;
 
-  // Get age group gender placement (place among M or F in same age group)  
+  // Get age group gender placement (rank among M or F in same age group in this race)  
   const ageGroupResult = await sql`
-    SELECT 
-      ROW_NUMBER() OVER (ORDER BY rr.place) as age_group_gender_place
-    FROM race_results rr
-    JOIN series_registrations sr ON rr.series_registration_id = sr.id
-    JOIN runners r ON sr.runner_id = r.id
-    WHERE rr.race_id = ${raceId}
-      AND r.gender = ${gender}
-      AND sr.age_group = ${ageGroup}
-      AND rr.is_dnf = false
-      AND rr.is_dq = false
-      AND rr.series_registration_id = ${seriesRegistrationId}
+    WITH age_group_rankings AS (
+      SELECT 
+        rr.series_registration_id,
+        ROW_NUMBER() OVER (ORDER BY rr.place) as age_group_gender_place
+      FROM race_results rr
+      JOIN series_registrations sr ON rr.series_registration_id = sr.id
+      JOIN runners r ON sr.runner_id = r.id
+      WHERE rr.race_id = ${raceId}
+        AND r.gender = ${gender}
+        AND sr.age_group = ${ageGroup}
+        AND rr.is_dnf = false
+        AND rr.is_dq = false
+    )
+    SELECT age_group_gender_place 
+    FROM age_group_rankings 
+    WHERE series_registration_id = ${seriesRegistrationId}
   `;
 
   const overallPlace = overallResult[0]?.gender_place || 999;

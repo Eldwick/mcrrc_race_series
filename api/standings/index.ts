@@ -35,6 +35,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         runnerId: standing.runner_id,
         year: standing.year,
         totalPoints: standing.total_points,
+        overallPoints: standing.overall_points,
+        ageGroupPoints: standing.age_group_points,
         racesParticipated: standing.races_participated,
         overallRank: standing.overall_rank || (index + 1),
         genderRank: standing.gender_rank,

@@ -9,6 +9,8 @@ interface MCRRCStanding {
   id: string;
   runnerId: string;
   totalPoints: number;
+  overallPoints: number;
+  ageGroupPoints: number;
   racesParticipated: number;
   overallRank: number;
   genderRank: number;
@@ -32,9 +34,8 @@ export function LeaderboardPage() {
   
   // MCRRC-specific filters
   const [filters, setFilters] = useState({
-    category: 'overall' as 'overall' | 'age-group', // MCRRC has 2 categories
+    category: 'overall' as string, // 'overall' or specific age group like '30-34'
     gender: 'M' as 'M' | 'F', // Default to Men's standings
-    ageGroup: '', // Only used when category = 'age-group'
     searchText: '',
     year: new Date().getFullYear()
   });
@@ -74,17 +75,16 @@ export function LeaderboardPage() {
       // Filter by selected gender
       const matchesGender = standing.runner.gender === filters.gender;
       
-      // Filter by age group if in age group category
-      const matchesAgeGroup = filters.category === 'overall' || 
-                              filters.ageGroup === '' || 
-                              standing.runner.ageGroup === filters.ageGroup;
+      // Filter by specific age group if not 'overall'
+      const matchesCategory = filters.category === 'overall' || 
+                              standing.runner.ageGroup === filters.category;
       
       // Filter by search text
       const matchesSearch = filters.searchText === '' || 
         `${standing.runner.firstName} ${standing.runner.lastName}`.toLowerCase().includes(filters.searchText.toLowerCase()) ||
         standing.runner.bibNumber.toLowerCase().includes(filters.searchText.toLowerCase());
         
-      return matchesGender && matchesAgeGroup && matchesSearch;
+      return matchesGender && matchesCategory && matchesSearch;
     })
     .sort((a, b) => {
       // Sort by the appropriate rank for the selected category
@@ -95,16 +95,12 @@ export function LeaderboardPage() {
       }
     });
 
-  const handleCategoryChange = (category: 'overall' | 'age-group') => {
-    setFilters(prev => ({ ...prev, category, ageGroup: category === 'overall' ? '' : prev.ageGroup }));
+  const handleCategoryChange = (category: string) => {
+    setFilters(prev => ({ ...prev, category }));
   };
 
   const handleGenderChange = (gender: 'M' | 'F') => {
     setFilters(prev => ({ ...prev, gender }));
-  };
-
-  const handleAgeGroupFilter = (ageGroup: string) => {
-    setFilters(prev => ({ ...prev, ageGroup }));
   };
 
   const handleSearchChange = (searchText: string) => {
@@ -137,8 +133,7 @@ export function LeaderboardPage() {
           <div className="mt-2">
             <h2 className="text-xl font-semibold text-primary-600">
               {filters.gender === 'M' ? "Men's" : "Women's"} {" "}
-              {filters.category === 'overall' ? 'Overall Category' : 'Age Group Category'}
-              {filters.category === 'age-group' && filters.ageGroup && ` - ${filters.ageGroup}`}
+              {filters.category === 'overall' ? 'Overall Category' : `${filters.category} Age Group`}
             </h2>
             <p className="text-gray-600 text-sm mt-1">
               {filters.year} standings • {filters.category === 'overall' 
@@ -149,27 +144,21 @@ export function LeaderboardPage() {
         </div>
         
         <div className="flex flex-col gap-4">
-          {/* Quick Category/Gender Toggles */}
+          {/* Category and Gender Controls */}
           <div className="flex flex-wrap gap-2">
-            {/* Category Toggle */}
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              <Button
-                variant={filters.category === 'overall' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => handleCategoryChange('overall')}
-                className="rounded-none border-r"
-              >
-                Overall
-              </Button>
-              <Button
-                variant={filters.category === 'age-group' ? 'primary' : 'ghost'}
-                size="sm"
-                onClick={() => handleCategoryChange('age-group')}
-                className="rounded-none"
-              >
-                Age Group
-              </Button>
-            </div>
+            {/* Category Dropdown */}
+            <Select
+              value={filters.category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              className="min-w-32"
+            >
+              <option value="overall">Overall</option>
+              {availableAgeGroups.map(ageGroup => (
+                <option key={ageGroup} value={ageGroup}>
+                  {ageGroup}
+                </option>
+              ))}
+            </Select>
 
             {/* Gender Toggle */}
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -224,14 +213,18 @@ export function LeaderboardPage() {
       {showFilters && (
         <Card>
           <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Category Selection */}
           <Select
             value={filters.category}
-            onChange={(e) => handleCategoryChange(e.target.value as 'overall' | 'age-group')}
+            onChange={(e) => handleCategoryChange(e.target.value)}
           >
-            <option value="overall">Overall Category</option>
-            <option value="age-group">Age Group Category</option>
+            <option value="overall">Overall</option>
+            {availableAgeGroups.map(ageGroup => (
+              <option key={ageGroup} value={ageGroup}>
+                {ageGroup}
+              </option>
+            ))}
           </Select>
 
           {/* Gender Selection */}
@@ -242,22 +235,6 @@ export function LeaderboardPage() {
             <option value="M">Men</option>
             <option value="F">Women</option>
           </Select>
-
-          {/* Age Group Filter - Only shown for Age Group category */}
-          {filters.category === 'age-group' && (
-            <Select
-              value={filters.ageGroup}
-              onChange={(e) => handleAgeGroupFilter(e.target.value)}
-              placeholder="Select Age Group"
-            >
-              <option value="">All Age Groups</option>
-              {availableAgeGroups.map(ageGroup => (
-                <option key={ageGroup} value={ageGroup}>
-                  {ageGroup}
-                </option>
-              ))}
-            </Select>
-          )}
 
           {/* Search */}
           <div className="relative">
@@ -424,7 +401,7 @@ export function LeaderboardPage() {
                         
                         <td className="py-4 px-2 text-right">
                           <div className="text-lg font-semibold text-gray-900">
-                            {standing.totalPoints}
+                            {filters.category === 'overall' ? standing.overallPoints : standing.ageGroupPoints}
                           </div>
                           <div className="text-xs text-gray-500">
                             {filters.category === 'overall' ? 'Overall Points' : 'Age Group Points'}
