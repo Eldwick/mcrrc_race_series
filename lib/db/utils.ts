@@ -1,5 +1,5 @@
 // Database utility functions for common operations
-import { sql } from './connection.js';
+import { getSql } from './connection.js';
 
 export interface DbRunner {
   id: string;
@@ -64,6 +64,7 @@ export interface DbSeriesStanding {
 
 // Runner operations
 export async function getAllRunners(): Promise<DbRunner[]> {
+  const sql = getSql();
   const result = await sql`
     SELECT * FROM runners 
     WHERE is_active = true 
@@ -73,23 +74,26 @@ export async function getAllRunners(): Promise<DbRunner[]> {
 }
 
 export async function getRunnerById(id: string): Promise<DbRunner | null> {
-  const result = await sql`
+  const sql = getSql();
+  const rows = await sql`
     SELECT * FROM runners 
     WHERE id = ${id} AND is_active = true
-  `;
-  return result.length > 0 ? result[0] as DbRunner : null;
+  ` as DbRunner[];
+  return rows[0] ?? null;
 }
 
 export async function getRunnerByBibNumber(bibNumber: string): Promise<DbRunner | null> {
-  const result = await sql`
+  const sql = getSql();
+  const rows = await sql`
     SELECT * FROM runners 
     WHERE bib_number = ${bibNumber} AND is_active = true
-  `;
-  return result.length > 0 ? result[0] as DbRunner : null;
+  ` as DbRunner[];
+  return rows[0] ?? null;
 }
 
 // Race operations
 export async function getAllRaces(year?: number): Promise<DbRace[]> {
+  const sql = getSql();
   if (year) {
     const result = await sql`
       SELECT * FROM races 
@@ -107,15 +111,17 @@ export async function getAllRaces(year?: number): Promise<DbRace[]> {
 }
 
 export async function getRaceById(id: string): Promise<DbRace | null> {
-  const result = await sql`
+  const sql = getSql();
+  const rows = await sql`
     SELECT * FROM races 
     WHERE id = ${id}
-  `;
-  return result.length > 0 ? result[0] as DbRace : null;
+  ` as DbRace[];
+  return rows[0] ?? null;
 }
 
 // Race results operations
 export async function getRaceResults(raceId: string): Promise<DbRaceResult[]> {
+  const sql = getSql();
   const result = await sql`
     SELECT rr.*, r.first_name, r.last_name, r.gender, r.age_group
     FROM race_results rr
@@ -127,6 +133,7 @@ export async function getRaceResults(raceId: string): Promise<DbRaceResult[]> {
 }
 
 export async function getRunnerResults(runnerId: string, year?: number): Promise<DbRaceResult[]> {
+  const sql = getSql();
   let query;
   if (year) {
     query = sql`
@@ -152,6 +159,7 @@ export async function getRunnerResults(runnerId: string, year?: number): Promise
 
 // Series standings operations
 export async function getSeriesStandings(year: number, seriesId?: string): Promise<any[]> {
+  const sql = getSql();
   let query;
   if (seriesId) {
     query = sql`
