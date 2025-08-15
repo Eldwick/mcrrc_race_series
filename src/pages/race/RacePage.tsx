@@ -1,50 +1,134 @@
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Trophy, Users } from 'lucide-react';
-import { useData } from '../../contexts/DataContext';
+import { ArrowLeft, Calendar, MapPin, Trophy, Users, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../../components/ui';
 import { formatDate, formatTime, formatPlace, formatRunnerName, getRunnerInitials } from '../../utils';
+import { api, ApiError } from '../../services/api';
+import type { Race } from '../../types';
+
+interface RaceResult {
+  id: string;
+  raceId: string;
+  place: number;
+  placeGender: number;
+  placeAgeGroup: number;
+  bibNumber: string;
+  gunTime: string;
+  chipTime: string;
+  pacePerMile: string;
+  isDNF: boolean;
+  isDQ: boolean;
+  overrideReason?: string;
+  runner: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    gender: string;
+    age: number;
+    ageGroup: string;
+    bibNumber: string;
+  };
+}
 
 export function RacePage() {
   const { id } = useParams<{ id: string }>();
-  const { state } = useData();
+  const [race, setRace] = useState<Race | null>(null);
+  const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const race = state.races.find(r => r.id === id);
-  const raceResults = state.results.filter(r => r.raceId === id);
+  useEffect(() => {
+    const fetchRaceData = async () => {
+      if (!id) {
+        setError('Race ID is required');
+        setLoading(false);
+        return;
+      }
 
-  if (!race) {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch race details and results in parallel
+        const [raceData, resultsData] = await Promise.all([
+          api.getRace(id),
+          api.getRaceResults(id)
+        ]);
+
+        setRace(raceData);
+        setRaceResults(resultsData);
+      } catch (err) {
+        console.error('Error fetching race data:', err);
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError('Failed to load race data');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRaceData();
+  }, [id]);
+
+  if (loading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Link to="/leaderboard">
+          <Link to="/races">
             <Button variant="outline" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Leaderboard
+              Back to Races
             </Button>
           </Link>
         </div>
         
         <Card>
           <CardContent className="text-center py-12">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Race Not Found</h2>
-            <p className="text-gray-600">The race you're looking for doesn't exist or has been removed.</p>
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Race Data</h2>
+            <p className="text-gray-600">Please wait while we fetch the race details...</p>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const getRunnerInfo = (runnerId: string) => {
-    return state.runners.find(runner => runner.id === runnerId);
-  };
+  if (error || !race) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link to="/races">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Races
+            </Button>
+          </Link>
+        </div>
+        
+        <Card>
+          <CardContent className="text-center py-12">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+              {error ? 'Error Loading Race' : 'Race Not Found'}
+            </h2>
+            <p className="text-gray-600">
+              {error || "The race you're looking for doesn't exist or has been removed."}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link to="/leaderboard">
+        <Link to="/races">
           <Button variant="outline" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Leaderboard
+            Back to Races
           </Button>
         </Link>
       </div>
@@ -71,7 +155,7 @@ export function RacePage() {
             </div>
 
             <div className="flex flex-wrap gap-2 mt-4">
-              <Badge variant="secondary">{race.series}</Badge>
+              <Badge variant="secondary">MCRRC Championship Series</Badge>
               <Badge variant="outline">{race.year}</Badge>
               {race.isOfficial && <Badge variant="success">Official</Badge>}
             </div>
@@ -133,9 +217,8 @@ export function RacePage() {
                 </thead>
                 <tbody>
                   {raceResults.map((result) => {
-                    const runner = getRunnerInfo(result.runnerId);
-                    if (!runner) return null;
-
+                    const { runner } = result;
+                    
                     return (
                       <tr key={result.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-4 px-2">
@@ -202,7 +285,7 @@ export function RacePage() {
                         
                         <td className="py-4 px-2 text-right">
                           <span className="text-sm text-gray-600">
-                            {result.isDNF || result.isDQ ? '-' : `${result.pace}/mi`}
+                            {result.isDNF || result.isDQ ? '-' : `${result.pacePerMile}/mi`}
                           </span>
                         </td>
                       </tr>

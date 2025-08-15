@@ -104,6 +104,59 @@ export const api = {
     }));
   },
 
+  // Get a specific race by ID
+  async getRace(id: string): Promise<Race> {
+    const response = await apiCall<{ data: any }>(`/races/${id}`);
+    const race = response.data;
+    
+    return {
+      id: race.id,
+      name: race.name,
+      date: race.date,
+      distance: race.distanceMiles ?? race.distance_miles ?? 0,
+      series: race.seriesId || race.series_id || 'default-series',
+      year: race.year,
+      location: race.location || '',
+      isOfficial: true,
+      raceUrl: race.mcrrcUrl || race.mcrrc_url,
+      resultsUrl: race.mcrrcUrl || race.mcrrc_url,
+      createdAt: race.createdAt || race.created_at,
+      updatedAt: race.updatedAt || race.updated_at,
+    };
+  },
+
+  // Get race results for a specific race
+  async getRaceResults(raceId: string): Promise<any[]> {
+    const response = await apiCall<{ data: any[]; count: number }>(`/races/${raceId}/results`);
+    
+    return response.data.map((result: any) => ({
+      id: result.id,
+      raceId: result.raceId,
+      place: result.place,
+      placeGender: result.placeGender,
+      placeAgeGroup: result.placeAgeGroup,
+      bibNumber: result.bibNumber,
+      gunTime: result.gunTime,
+      chipTime: result.chipTime,
+      pacePerMile: result.pacePerMile,
+      isDNF: result.isDNF,
+      isDQ: result.isDQ,
+      overrideReason: result.overrideReason,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      // Runner information embedded in the result
+      runner: {
+        id: result.runner.id,
+        firstName: result.runner.firstName,
+        lastName: result.runner.lastName,
+        gender: result.runner.gender,
+        age: result.runner.age,
+        ageGroup: result.runner.ageGroup,
+        bibNumber: result.runner.bibNumber,
+      }
+    }));
+  },
+
   // Get series standings
   async getStandings(year: number, seriesId?: string): Promise<SeriesStanding[]> {
     const params = new URLSearchParams({ year: year.toString() });
@@ -222,7 +275,7 @@ export const api = {
       headers: {
         'Content-Type': 'application/json'
       },
-      data: params
+      body: JSON.stringify(params)
     });
   },
 };
