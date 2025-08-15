@@ -1,7 +1,7 @@
 // GET /api/health - Health check and database connectivity test
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-// import { testConnection } from '../../lib/db/connection.js';
+// import { testConnection } from '../../lib/db/connection';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
