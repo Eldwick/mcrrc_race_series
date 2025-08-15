@@ -120,35 +120,59 @@ export async function getRaceById(id: string): Promise<DbRace | null> {
 }
 
 // Race results operations
-export async function getRaceResults(raceId: string): Promise<DbRaceResult[]> {
+export async function getRaceResults(raceId: string): Promise<any[]> {
   const sql = getSql();
   const result = await sql`
-    SELECT rr.*, r.first_name, r.last_name, r.gender, r.age_group
+    SELECT 
+      rr.*,
+      r.first_name, 
+      r.last_name, 
+      r.gender, 
+      sr.age_group,
+      sr.age,
+      sr.bib_number
     FROM race_results rr
-    JOIN runners r ON rr.runner_id = r.id
+    JOIN series_registrations sr ON rr.series_registration_id = sr.id
+    JOIN runners r ON sr.runner_id = r.id
     WHERE rr.race_id = ${raceId}
     ORDER BY rr.place ASC
   `;
   return result as any[];
 }
 
-export async function getRunnerResults(runnerId: string, year?: number): Promise<DbRaceResult[]> {
+export async function getRunnerResults(runnerId: string, year?: number): Promise<any[]> {
   const sql = getSql();
   let query;
   if (year) {
     query = sql`
-      SELECT rr.*, ra.name as race_name, ra.date as race_date, ra.distance_miles
+      SELECT 
+        rr.*, 
+        ra.name as race_name, 
+        ra.date as race_date, 
+        ra.distance_miles,
+        sr.bib_number,
+        sr.age,
+        sr.age_group
       FROM race_results rr
       JOIN races ra ON rr.race_id = ra.id
-      WHERE rr.runner_id = ${runnerId} AND ra.year = ${year}
+      JOIN series_registrations sr ON rr.series_registration_id = sr.id
+      WHERE sr.runner_id = ${runnerId} AND ra.year = ${year}
       ORDER BY ra.date DESC
     `;
   } else {
     query = sql`
-      SELECT rr.*, ra.name as race_name, ra.date as race_date, ra.distance_miles
+      SELECT 
+        rr.*, 
+        ra.name as race_name, 
+        ra.date as race_date, 
+        ra.distance_miles,
+        sr.bib_number,
+        sr.age,
+        sr.age_group
       FROM race_results rr
       JOIN races ra ON rr.race_id = ra.id
-      WHERE rr.runner_id = ${runnerId}
+      JOIN series_registrations sr ON rr.series_registration_id = sr.id
+      WHERE sr.runner_id = ${runnerId}
       ORDER BY ra.date DESC
     `;
   }
@@ -225,21 +249,45 @@ export function secondsToInterval(seconds: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function formatTimeFromInterval(interval: string): string {
+export function formatTimeFromInterval(interval: any): string {
   // Convert interval to display format (MM:SS or HH:MM:SS)
   if (!interval) return '-';
   
-  const parts = interval.split(':');
-  if (parts.length === 3) {
-    const hours = parseInt(parts[0]);
-    const minutes = parts[1];
-    const seconds = parts[2];
+  // Handle PostgresInterval objects
+  if (typeof interval === 'object' && interval.minutes !== undefined) {
+    const hours = interval.hours || 0;
+    const minutes = interval.minutes || 0;
+    const seconds = interval.seconds || 0;
+    
+    // Format with leading zeros
+    const mm = minutes.toString().padStart(2, '0');
+    const ss = seconds.toString().padStart(2, '0');
     
     if (hours > 0) {
-      return `${hours}:${minutes}:${seconds}`;
+      const hh = hours.toString().padStart(2, '0');
+      return `${hh}:${mm}:${ss}`;
     } else {
-      return `${minutes}:${seconds}`;
+      return `${mm}:${ss}`;
     }
   }
-  return interval;
+  
+  // Handle string intervals (fallback)
+  if (typeof interval === 'string') {
+    const timeMatch = interval.match(/(\d{1,2}:\d{2}:\d{2})/);
+    if (timeMatch) {
+      const parts = timeMatch[1].split(':');
+      const hours = parseInt(parts[0]);
+      const minutes = parts[1];
+      const seconds = parts[2];
+      
+      if (hours > 0) {
+        return `${hours}:${minutes}:${seconds}`;
+      } else {
+        return `${minutes}:${seconds}`;
+      }
+    }
+    return interval;
+  }
+  
+  return '-';
 }
