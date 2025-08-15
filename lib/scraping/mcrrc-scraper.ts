@@ -517,28 +517,61 @@ export class MCRRCScraper {
       runnerId = runnerResult[0].id;
     }
 
-    // Check if series registration already exists
+    // Check if series registration already exists (by runner_id OR bib_number)
     const existingRegistration = await sql`
-      SELECT id FROM series_registrations 
-      WHERE series_id = ${seriesId} AND runner_id = ${runnerId}
+      SELECT id, runner_id, bib_number FROM series_registrations 
+      WHERE series_id = ${seriesId} 
+        AND (runner_id = ${runnerId} OR bib_number = ${runner.bibNumber})
     ` as any[];
 
     if (existingRegistration.length > 0) {
-      // Update existing registration
-      await sql`
-        UPDATE series_registrations SET
-          bib_number = ${runner.bibNumber},
-          age = ${runner.age},
-          age_group = ${ageGroup},
-          updated_at = NOW()
-        WHERE id = ${existingRegistration[0].id}
-      `;
+      const reg = existingRegistration[0];
+      
+      // If this is the same runner, just update their registration
+      if (reg.runner_id === runnerId) {
+        await sql`
+          UPDATE series_registrations SET
+            bib_number = ${runner.bibNumber},
+            age = ${runner.age},
+            age_group = ${ageGroup},
+            updated_at = NOW()
+          WHERE id = ${reg.id}
+        `;
+        console.log(`Updated registration for runner ${runnerId} with bib ${runner.bibNumber}`);
+      } else {
+        // Bib number conflict: another runner already has this bib number
+        console.warn(`Bib number conflict: Runner ${runnerId} wants bib ${runner.bibNumber}, but it's already assigned to runner ${reg.runner_id}`);
+        
+        // Check if this runner has any other registration in this series
+        const runnerReg = await sql`
+          SELECT id FROM series_registrations 
+          WHERE series_id = ${seriesId} AND runner_id = ${runnerId}
+        ` as any[];
+        
+        if (runnerReg.length > 0) {
+          // Update their existing registration with new bib (will handle conflict resolution)
+          await sql`
+            UPDATE series_registrations SET
+              bib_number = ${runner.bibNumber},
+              age = ${runner.age},
+              age_group = ${ageGroup},
+              updated_at = NOW()
+            WHERE id = ${runnerReg[0].id}
+          `;
+          console.log(`Updated existing registration for runner ${runnerId}`);
+        } else {
+          // Skip creating duplicate bib registration to avoid constraint violation
+          console.warn(`Skipping registration for runner ${runnerId} due to bib number conflict`);
+          return;
+        }
+      }
     } else {
       // Create new series registration (bib number mapping)
       await sql`
         INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
         VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
       `;
+      console.log(`Created new registration for runner ${runnerId} with bib ${runner.bibNumber}`);
     }
   }
 
