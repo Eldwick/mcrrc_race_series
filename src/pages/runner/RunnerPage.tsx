@@ -1,16 +1,61 @@
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, Clock, MapPin } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Calendar, Clock, MapPin, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../../components/ui';
 import { formatRunnerName, formatDate, formatTime, formatPlace, getRunnerInitials } from '../../utils';
+import { api } from '../../services/api';
+
+// Helper function to format time objects from API
+const formatTimeObject = (timeObj: any): string => {
+  if (!timeObj) return '-';
+  if (typeof timeObj === 'string') return timeObj;
+  
+  const minutes = timeObj.minutes || 0;
+  const seconds = timeObj.seconds || 0;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
 
 export function RunnerPage() {
   const { id } = useParams<{ id: string }>();
   const { state } = useData();
+  
+  // Local state for runner-specific data
+  const [runnerData, setRunnerData] = useState<any>(null);
+  const [runnerResults, setRunnerResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const runner = state.runners.find(r => r.id === id);
   const runnerStanding = state.standings.find(s => s.runnerId === id && s.year === state.selectedYear);
-  const runnerResults = state.results.filter(r => r.runnerId === id);
+
+  // Load runner data and results
+  useEffect(() => {
+    const loadRunnerData = async () => {
+      if (!id) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Load runner details and results in parallel
+        const [runnerResponse, resultsResponse] = await Promise.all([
+          api.getRunner(id),
+          api.getRunnerResults(id, state.selectedYear)
+        ]);
+        
+        setRunnerData(runnerResponse);
+        setRunnerResults(resultsResponse);
+      } catch (err) {
+        console.error('Error loading runner data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load runner data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRunnerData();
+  }, [id, state.selectedYear]);
 
   if (!runner) {
     return (
@@ -28,6 +73,54 @@ export function RunnerPage() {
           <CardContent className="text-center py-12">
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Runner Not Found</h2>
             <p className="text-gray-600">The runner you're looking for doesn't exist or has been removed.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link to="/leaderboard">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Leaderboard
+            </Button>
+          </Link>
+        </div>
+        
+        <Card>
+          <CardContent className="text-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Runner</h2>
+            <p className="text-gray-600">Please wait while we load the runner's data...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link to="/leaderboard">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Leaderboard
+            </Button>
+          </Link>
+        </div>
+        
+        <Card>
+          <CardContent className="text-center py-12">
+            <h2 className="text-xl font-semibold text-red-700 mb-2">Error Loading Runner</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Try Again</Button>
           </CardContent>
         </Card>
       </div>
@@ -116,7 +209,7 @@ export function RunnerPage() {
           ) : (
             <div className="space-y-4">
               {runnerResults.map((result) => {
-                const race = state.races.find(r => r.id === result.raceId);
+                const race = result.race;
                 if (!race) return null;
 
                 return (
@@ -136,7 +229,7 @@ export function RunnerPage() {
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="w-4 h-4" />
-                            {race.location}
+                            {race.distanceMiles} miles
                           </span>
                         </div>
                       </div>
@@ -160,12 +253,12 @@ export function RunnerPage() {
                         <div className="text-gray-600">Time</div>
                         <div className="font-medium flex items-center gap-1">
                           <Clock className="w-4 h-4" />
-                          {formatTime(result.gunTime)}
+                          {formatTimeObject(result.gunTime)}
                         </div>
                       </div>
                       <div>
                         <div className="text-gray-600">Pace</div>
-                        <div className="font-medium">{result.pace}/mile</div>
+                        <div className="font-medium">{formatTimeObject(result.pacePerMile)}/mile</div>
                       </div>
                       <div>
                         <div className="text-gray-600">Gender Place</div>

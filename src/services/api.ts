@@ -105,6 +105,40 @@ export const api = {
     };
   },
 
+  // Get race results for a specific runner
+  async getRunnerResults(runnerId: string, year?: number): Promise<any[]> {
+    const endpoint = year ? `/runners/${runnerId}/results?year=${year}` : `/runners/${runnerId}/results`;
+    const response = await apiCall<{ data: any[]; count: number; runnerId: string }>(endpoint);
+    
+    return response.data.map((result: any) => ({
+      id: result.id,
+      raceId: result.raceId,
+      runnerId: result.runnerId,
+      place: result.place,
+      placeGender: result.placeGender,
+      placeAgeGroup: result.placeAgeGroup,
+      bibNumber: result.bibNumber,
+      gunTime: result.gunTime,
+      chipTime: result.chipTime,
+      pacePerMile: result.pacePerMile,
+      isDNF: result.isDNF,
+      isDQ: result.isDQ,
+      overrideReason: result.overrideReason,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      // Race information
+      race: {
+        id: result.race.id,
+        name: result.race.name,
+        date: result.race.date,
+        distanceMiles: result.race.distanceMiles,
+      },
+      // Runner info from series registration
+      age: result.age,
+      ageGroup: result.ageGroup,
+    }));
+  },
+
   // Get races by year (optional)
   async getRaces(year?: number): Promise<any[]> {
     const endpoint = year ? `/races?year=${year}` : '/races';
