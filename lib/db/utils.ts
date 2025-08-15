@@ -168,11 +168,13 @@ export async function getSeriesStandings(year: number, seriesId?: string): Promi
         r.first_name,
         r.last_name,
         r.gender,
-        r.age_group,
-        r.bib_number
+        sr.age_group,
+        sr.bib_number,
+        sr.age
       FROM series_standings ss
-      JOIN runners r ON ss.runner_id = r.id
-      WHERE ss.year = ${year} AND ss.series_id = ${seriesId}
+      JOIN series_registrations sr ON ss.series_registration_id = sr.id
+      JOIN runners r ON sr.runner_id = r.id
+      WHERE sr.series_id = ${seriesId}
       ORDER BY ss.total_points DESC, ss.races_participated DESC
     `;
   } else {
@@ -182,13 +184,16 @@ export async function getSeriesStandings(year: number, seriesId?: string): Promi
         r.first_name,
         r.last_name,
         r.gender,
-        r.age_group,
-        r.bib_number,
-        s.name as series_name
+        sr.age_group,
+        sr.bib_number,
+        sr.age,
+        s.name as series_name,
+        s.year
       FROM series_standings ss
-      JOIN runners r ON ss.runner_id = r.id
-      JOIN series s ON ss.series_id = s.id
-      WHERE ss.year = ${year}
+      JOIN series_registrations sr ON ss.series_registration_id = sr.id
+      JOIN runners r ON sr.runner_id = r.id
+      JOIN series s ON sr.series_id = s.id
+      WHERE s.year = ${year}
       ORDER BY ss.total_points DESC, ss.races_participated DESC
     `;
   }

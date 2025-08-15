@@ -117,14 +117,25 @@ export function AdminPage() {
               <p className="text-sm text-gray-600 mb-4">
                 Automatically scrape race results from MCRRC.org and update standings.
               </p>
-              <Button 
-                onClick={handleScrapeMCRRC}
-                loading={isLoading}
-                className="w-full"
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Scrape Latest Results
-              </Button>
+              <div className="space-y-2">
+                <Button 
+                  onClick={handleScrapeMCRRC}
+                  loading={isLoading}
+                  className="w-full"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Quick Scrape
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => window.open('/admin/scraping', '_blank')}
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Advanced Scraping
+                </Button>
+              </div>
             </div>
 
             <div className="border-t pt-4">

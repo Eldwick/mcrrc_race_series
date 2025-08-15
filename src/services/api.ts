@@ -203,4 +203,26 @@ export const api = {
     const response = await apiCall<{ data: any }>('/health');
     return response.data;
   },
+
+  // Scraping status
+  async scrapingStatus(): Promise<{ success: boolean; data: any }> {
+    return await apiCall('/scrape/status');
+  },
+
+  // Scrape races
+  async scrapeRaces(params: {
+    secret: string;
+    action: 'discover' | 'scrape-race' | 'scrape-all';
+    year?: number;
+    url?: string;
+    seriesId?: string;
+  }): Promise<any> {
+    return await apiCall('/scrape', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      data: params
+    });
+  },
 };
