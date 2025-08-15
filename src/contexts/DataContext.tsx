@@ -8,6 +8,7 @@ import type {
   FilterOptions, 
   SortOptions 
 } from '../types';
+import { api } from '../services/api';
 
 // State interface
 interface DataState {
@@ -300,20 +301,40 @@ export function DataProvider({ children }: DataProviderProps) {
 
   const refreshData = async () => {
     dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+    
     try {
-      // This would be replaced with actual API calls
-      // For now, we'll load mock data
-      loadMockData();
+      // Load data from API endpoints
+      const [runners, races, standings, series] = await Promise.all([
+        api.getRunners(),
+        api.getRaces(state.selectedYear),
+        api.getStandings(state.selectedYear, state.selectedSeries || undefined),
+        api.getSeries(),
+      ]);
+      
+      dispatch({ type: 'SET_RUNNERS', payload: runners });
+      dispatch({ type: 'SET_RACES', payload: races });
+      dispatch({ type: 'SET_STANDINGS', payload: standings });
+      dispatch({ type: 'SET_SERIES', payload: series });
+      dispatch({ type: 'SET_LOADING', payload: false });
+      
     } catch (error) {
+      console.error('Failed to load data:', error);
       dispatch({ 
         type: 'SET_ERROR', 
-        payload: error instanceof Error ? error.message : 'Unknown error' 
+        payload: error instanceof Error ? error.message : 'Failed to load data from server' 
       });
+      
+      // Fallback to mock data if API fails in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Falling back to mock data...');
+        loadMockDataFallback();
+      }
     }
   };
 
-  // Load mock data for development
-  const loadMockData = () => {
+  // Fallback to mock data in development
+  const loadMockDataFallback = () => {
     import('../utils/mockData').then(({ mockData }) => {
       dispatch({ type: 'SET_RUNNERS', payload: mockData.runners });
       dispatch({ type: 'SET_RACES', payload: mockData.races });
@@ -321,6 +342,7 @@ export function DataProvider({ children }: DataProviderProps) {
       dispatch({ type: 'SET_STANDINGS', payload: mockData.standings });
       dispatch({ type: 'SET_SERIES', payload: mockData.series });
       dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: 'SET_ERROR', payload: 'Using offline data - check API connection' });
     });
   };
 
@@ -328,6 +350,13 @@ export function DataProvider({ children }: DataProviderProps) {
   useEffect(() => {
     refreshData();
   }, []);
+
+  // Refresh data when year changes
+  useEffect(() => {
+    if (state.selectedYear) {
+      refreshData();
+    }
+  }, [state.selectedYear]);
 
   const value: DataContextValue = {
     state,

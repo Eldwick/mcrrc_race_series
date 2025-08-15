@@ -1,7 +1,7 @@
 // GET /api/health - Health check and database connectivity test
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-// import { testConnection } from '../../lib/db/connection';
+import { testConnection } from '../../lib/db/connection';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Test database connection if DATABASE_URL exists
     if (process.env.DATABASE_URL) {
       try {
-        // await testConnection();
+        await testConnection();
         health.database = 'connected';
       } catch (dbError) {
         health.database = 'error';
