@@ -2,7 +2,7 @@
 // Based on official rules: https://mcrrc.org/club-race-series/championship-series-cs/
 
 import { CHAMPIONSHIP_SERIES_POINTS } from '../types';
-import type { RacePoints, SeriesStanding, AgeGroup } from '../types';
+import type { RacePoints, AgeGroup } from '../types';
 
 /**
  * Calculate points for a race result based on MCRRC R4 rules
@@ -10,9 +10,7 @@ import type { RacePoints, SeriesStanding, AgeGroup } from '../types';
  */
 export function calculateRacePoints(
   overallGenderPlace: number,    // Overall place among all M or F
-  ageGroupGenderPlace: number,   // Place within age group among M or F
-  gender: 'M' | 'F',
-  ageGroup: AgeGroup
+  ageGroupGenderPlace: number   // Place within age group among M or F
 ): RacePoints {
   let overallPoints = 0;
   let ageGroupPoints = 0;

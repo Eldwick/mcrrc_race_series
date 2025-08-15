@@ -90,7 +90,7 @@ export function RunnerPage() {
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-900">
-                      {runnerStanding.qualifyingRaces.length}
+                      {runnerStanding.qualifyingRaces}
                     </div>
                     <div className="text-sm text-gray-600">Qualifying</div>
                   </div>

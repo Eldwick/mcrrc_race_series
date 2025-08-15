@@ -100,8 +100,10 @@ export function calculateSeriesStandings(
       year,
       totalPoints,
       racesParticipated: runnerResults.length,
-      qualifyingRaces: countingRaces,
-      updatedAt: new Date().toISOString()
+      qualifyingRaces: Math.ceil(runnerResults.length / 2), // Q = half of races, rounded up
+      raceScores: [],
+      updatedAt: new Date().toISOString(),
+      lastCalculatedAt: new Date().toISOString()
     });
   });
 
@@ -217,7 +219,7 @@ function compareNextBestRace(
   const pointsA = getAllRacePoints(standingA.runnerId);
   const pointsB = getAllRacePoints(standingB.runnerId);
 
-  const maxRaces = Math.max(standingA.qualifyingRaces.length, standingB.qualifyingRaces.length);
+  const maxRaces = Math.max(standingA.racesParticipated, standingB.racesParticipated);
   
   // Compare the next best race after the counting races
   for (let i = maxRaces; i < Math.max(pointsA.length, pointsB.length); i++) {
@@ -241,10 +243,8 @@ function compareTotalDistance(
   races: Race[]
 ): number {
   const getDistance = (standing: SeriesStanding) => {
-    return standing.qualifyingRaces.reduce((total, qRace) => {
-      const race = races.find(r => r.id === qRace.raceId);
-      return total + (race?.distance || 0);
-    }, 0);
+    // TODO: Implement distance calculation with new data structure
+    return 0;
   };
 
   const distanceA = getDistance(standingA);
@@ -262,17 +262,8 @@ function compareTotalTime(
   results: RaceResult[]
 ): number {
   const getTotalSeconds = (standing: SeriesStanding) => {
-    return standing.qualifyingRaces.reduce((total, qRace) => {
-      const result = results.find(r => 
-        r.raceId === qRace.raceId && r.runnerId === standing.runnerId
-      );
-      if (!result || result.isDNF || result.isDQ) return total;
-      
-      const time = result.gunTime;
-      const [hours, minutes, seconds] = time.split(':').map(Number);
-      const totalSeconds = (hours || 0) * 3600 + minutes * 60 + seconds;
-      return total + totalSeconds;
-    }, 0);
+    // TODO: Implement total time calculation with new data structure
+    return 0;
   };
 
   const timeA = getTotalSeconds(standingA);

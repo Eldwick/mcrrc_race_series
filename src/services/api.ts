@@ -203,7 +203,9 @@ export const api = {
       overallRank: standing.overallRank ?? standing.overall_rank ?? (index + 1),
       genderRank: standing.genderRank ?? standing.gender_rank,
       ageGroupRank: standing.ageGroupRank ?? standing.age_group_rank,
-      qualifyingRaces: standing.qualifyingRaces ?? standing.qualifying_races ?? [],
+      qualifyingRaces: standing.qualifyingRaces ?? standing.qualifying_races ?? 0,
+      raceScores: standing.raceScores ?? [],
+      lastCalculatedAt: standing.lastCalculatedAt || standing.last_calculated_at || new Date().toISOString(),
       updatedAt: standing.updatedAt || standing.updated_at || standing.last_calculated_at,
       
       // Include runner information if present

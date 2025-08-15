@@ -418,8 +418,10 @@ function calculateMockStandings(): SeriesStanding[] {
       year: CURRENT_YEAR,
       totalPoints,
       racesParticipated: runnerResults.length,
-      qualifyingRaces,
+      qualifyingRaces: runnerResults.length, // For mock data, use race count
+      raceScores: [],
       updatedAt: new Date().toISOString(),
+      lastCalculatedAt: new Date().toISOString(),
     });
   });
 

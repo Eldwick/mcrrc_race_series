@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -334,7 +334,7 @@ export function ScrapingPage() {
 
       {/* Last Update */}
       <div className="text-center text-sm text-gray-500">
-        Last scrape: {formatDate(status?.overview.last_scrape_time)}
+        Last scrape: {formatDate(status?.overview?.last_scrape_time ?? null)}
       </div>
     </div>
   );
