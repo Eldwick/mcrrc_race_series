@@ -12,6 +12,7 @@ export interface Runner {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  raceCount?: number; // Number of races participated in current year
 }
 
 export interface Race {
@@ -127,13 +128,42 @@ export const AGE_GROUPS = [
 
 export type AgeGroup = typeof AGE_GROUPS[number];
 
-// Scoring constants
+// MCRRC Championship Series Scoring (R4)
 export const CHAMPIONSHIP_SERIES_POINTS = {
-  // Points for overall top 10 M/F
-  OVERALL: [100, 90, 80, 75, 70, 65, 60, 55, 50, 45],
-  // Points for age group top 10
-  AGE_GROUP: [50, 45, 40, 38, 36, 34, 32, 30, 28, 26]
+  // Points for top 10 M/F overall: 1st=10pts, 2nd=9pts, ..., 10th=1pt
+  OVERALL: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+  // Points for top 10 M/F in each age group: 1st=10pts, 2nd=9pts, ..., 10th=1pt  
+  AGE_GROUP: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
 } as const;
+
+// MCRRC Championship Series Types
+export interface RacePoints {
+  overallPoints: number;      // Points from overall M/F placement (0-10)
+  ageGroupPoints: number;     // Points from age group M/F placement (0-10) 
+  totalPoints: number;        // overallPoints + ageGroupPoints
+  overallPlace?: number;      // Overall M/F place (if top 10)
+  ageGroupPlace?: number;     // Age group M/F place (if top 10)
+}
+
+export interface SeriesStanding {
+  id: string;
+  runnerId: string;
+  seriesId: string;
+  year: number;
+  // Race participation and scoring
+  racesParticipated: number;
+  qualifyingRaces: number;    // Q = half of total series races, rounded up
+  raceScores: RacePoints[];   // Individual race point scores
+  // Final standing calculation  
+  totalPoints: number;        // Sum of Q highest race scores
+  overallRank?: number;       // Overall series placement
+  genderRank?: number;        // Gender series placement  
+  ageGroupRank?: number;      // Age group series placement
+  // Tiebreaker data
+  totalDistance?: number;     // T3: sum of distances of all completed races
+  totalTime?: string;         // T4: sum of times of all completed races
+  lastCalculatedAt: string;
+}
 
 // API response types
 export interface ApiResponse<T> {

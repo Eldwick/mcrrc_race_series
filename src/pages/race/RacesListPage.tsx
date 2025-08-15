@@ -1,31 +1,110 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Trophy, Users, Clock } from 'lucide-react';
+import { Calendar, MapPin, Trophy, Users, Clock, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardContent, Badge } from '../../components/ui';
-import { formatDate } from '../../utils';
+import { formatDate, formatRunnerName, getRunnerInitials } from '../../utils';
+import { api } from '../../services/api';
+
+interface RaceWithSummary {
+  id: string;
+  name: string;
+  date: string;
+  year: number;
+  distanceMiles: number;
+  location: string;
+  mcrrcUrl: string;
+  summary?: {
+    totalParticipants: number;
+    completed: number;
+    dnfDq: number;
+    topResults: Array<{
+      place: number;
+      firstName: string;
+      lastName: string;
+      gender: string;
+      ageGroup: string;
+      bibNumber: string;
+      gunTime: string;
+      genderRank: number;
+    }>;
+  };
+}
 
 export function RacesListPage() {
   const { state } = useData();
+  const [races, setRaces] = useState<RaceWithSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // Filter races for current year and sort by date
-  const currentYearRaces = state.races
-    .filter(race => race.year === state.selectedYear)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  // Get race statistics
-  const getRaceStats = (raceId: string) => {
-    const raceResults = state.results.filter(r => r.raceId === raceId);
-    return {
-      totalParticipants: raceResults.length,
-      completedRaces: raceResults.filter(r => !r.isDNF && !r.isDQ).length,
-      dnfDq: raceResults.filter(r => r.isDNF || r.isDQ).length
+  useEffect(() => {
+    const fetchRaces = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const racesData = await api.getRaces(state.selectedYear);
+        setRaces(racesData as RaceWithSummary[]);
+      } catch (err) {
+        console.error('Error fetching races:', err);
+        setError('Failed to load races data');
+      } finally {
+        setLoading(false);
+      }
     };
-  };
+
+    fetchRaces();
+  }, [state.selectedYear]);
 
   // Check if race has passed
   const isRacePast = (raceDate: string) => {
     return new Date(raceDate) < new Date();
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Races</h1>
+          <p className="text-gray-600 mt-1">
+            {state.selectedYear} Championship Series races
+          </p>
+        </div>
+        
+        <Card>
+          <CardContent className="text-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Races</h2>
+            <p className="text-gray-600">Please wait while we fetch the races data...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Races</h1>
+          <p className="text-gray-600 mt-1">
+            {state.selectedYear} Championship Series races
+          </p>
+        </div>
+        
+        <Card>
+          <CardContent className="text-center py-12">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Races</h2>
+            <p className="text-gray-600">{error}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Filter and sort races
+  const currentYearRaces = races
+    .filter(race => race.year === state.selectedYear)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   return (
     <div className="space-y-6">
@@ -79,7 +158,7 @@ export function RacesListPage() {
           <CardContent className="flex items-center justify-between p-6">
             <div>
               <h3 className="text-2xl font-bold text-gray-900">
-                {state.results.length}
+                {currentYearRaces.reduce((total, race) => total + (race.summary?.totalParticipants || 0), 0)}
               </h3>
               <p className="text-sm text-gray-600">Total Results</p>
             </div>
@@ -102,8 +181,9 @@ export function RacesListPage() {
           </Card>
         ) : (
           currentYearRaces.map((race) => {
-            const stats = getRaceStats(race.id);
             const isPast = isRacePast(race.date);
+            const summary = race.summary || { totalParticipants: 0, completed: 0, dnfDq: 0, topResults: [] };
+            const hasResults = summary.totalParticipants > 0;
             
             return (
               <Link key={race.id} to={`/race/${race.id}`}>
@@ -125,7 +205,7 @@ export function RacesListPage() {
                           </div>
                           <div className="flex items-center gap-1">
                             <Trophy className="w-4 h-4" />
-                            {race.distance} miles
+                            {race.distanceMiles} miles
                           </div>
                         </div>
                       </div>
@@ -137,35 +217,106 @@ export function RacesListPage() {
                         >
                           {isPast ? "Completed" : "Upcoming"}
                         </Badge>
-                        {race.isOfficial && (
-                          <Badge variant="success" size="sm">
-                            Official
-                          </Badge>
-                        )}
+                        <Badge variant="success" size="sm">
+                          Official
+                        </Badge>
                       </div>
                     </div>
 
-                    {/* Race Stats */}
-                    {isPast && stats.totalParticipants > 0 ? (
-                      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-200">
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-gray-900">
-                            {stats.totalParticipants}
+                    {/* Race Results */}
+                    {isPast && hasResults ? (
+                      <div className="pt-4 border-t border-gray-200">
+                        {/* Stats Row */}
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-gray-900">
+                              {summary.totalParticipants}
+                            </div>
+                            <div className="text-xs text-gray-500">Participants</div>
                           </div>
-                          <div className="text-xs text-gray-500">Participants</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-green-600">
-                            {stats.completedRaces}
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-green-600">
+                              {summary.completed}
+                            </div>
+                            <div className="text-xs text-gray-500">Finished</div>
                           </div>
-                          <div className="text-xs text-gray-500">Finished</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-red-600">
-                            {stats.dnfDq}
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-red-600">
+                              {summary.dnfDq}
+                            </div>
+                            <div className="text-xs text-gray-500">DNF/DQ</div>
                           </div>
-                          <div className="text-xs text-gray-500">DNF/DQ</div>
                         </div>
+
+                        {/* Top Performers */}
+                        {summary.topResults.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-900 mb-3">Top Finishers</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Top 3 Men */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Trophy className="w-4 h-4 text-blue-600" />
+                                  <span className="text-xs font-medium text-blue-700">Men</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {summary.topResults
+                                    .filter(result => result.gender === 'M')
+                                    .map((result) => (
+                                      <div key={`${result.gender}-${result.genderRank}`} 
+                                           className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <span className="text-[10px] font-medium text-blue-700">
+                                              {getRunnerInitials(result.firstName, result.lastName)}
+                                            </span>
+                                          </div>
+                                          <span className="text-gray-900">
+                                            {formatRunnerName(result.firstName, result.lastName)}
+                                          </span>
+                                        </div>
+                                        <span className="text-gray-600 font-medium">
+                                          {result.gunTime}
+                                        </span>
+                                      </div>
+                                    ))
+                                  }
+                                </div>
+                              </div>
+
+                              {/* Top 3 Women */}
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Trophy className="w-4 h-4 text-pink-600" />
+                                  <span className="text-xs font-medium text-pink-700">Women</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {summary.topResults
+                                    .filter(result => result.gender === 'F')
+                                    .map((result) => (
+                                      <div key={`${result.gender}-${result.genderRank}`} 
+                                           className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-5 h-5 bg-pink-100 rounded-full flex items-center justify-center">
+                                            <span className="text-[10px] font-medium text-pink-700">
+                                              {getRunnerInitials(result.firstName, result.lastName)}
+                                            </span>
+                                          </div>
+                                          <span className="text-gray-900">
+                                            {formatRunnerName(result.firstName, result.lastName)}
+                                          </span>
+                                        </div>
+                                        <span className="text-gray-600 font-medium">
+                                          {result.gunTime}
+                                        </span>
+                                      </div>
+                                    ))
+                                  }
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : !isPast ? (
                       <div className="pt-4 border-t border-gray-200">

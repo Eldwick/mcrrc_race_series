@@ -206,6 +206,10 @@ export class MCRRCScraper {
       // MCRRC specific column mappings
       if (h === 'place' || h.includes('place') || h.includes('pos') || h === '#' || h === 'pl') {
         map.place = index;
+      } else if (h === 'gen/tot' || h === 'gen' || h.includes('gender total')) {
+        map.genderPlace = index;
+      } else if (h === 'div/tot' || h === 'div' || h.includes('division') || h.includes('age group')) {
+        map.ageGroupPlace = index;
       } else if (h === 'num' || h.includes('bib') || h === 'number') {
         map.bib = index;
       } else if (h === 'name' || h.includes('name') || h.includes('runner')) {
@@ -255,11 +259,27 @@ export class MCRRCScraper {
       const isDQ = placeText.toLowerCase().includes('dq');
       const place = isDNF || isDQ ? 999 : parseInt(placeText) || 0;
 
+      // Parse gender placement from "Gen/Tot" column (e.g., "1/134")
+      const genderPlaceText = getText('genderPlace');
+      let placeGender = 0;
+      if (genderPlaceText && !isDNF && !isDQ) {
+        const genderMatch = genderPlaceText.match(/^(\d+)\//);
+        placeGender = genderMatch ? parseInt(genderMatch[1]) : 0;
+      }
+
+      // Parse age group placement from "Div/Tot" column (e.g., "1/12")
+      const ageGroupPlaceText = getText('ageGroupPlace');
+      let placeAgeGroup = 0;
+      if (ageGroupPlaceText && !isDNF && !isDQ) {
+        const ageGroupMatch = ageGroupPlaceText.match(/^(\d+)\//);
+        placeAgeGroup = ageGroupMatch ? parseInt(ageGroupMatch[1]) : 0;
+      }
+
       return {
         bibNumber,
         place,
-        placeGender: 0, // Will be calculated later
-        placeAgeGroup: 0, // Will be calculated later
+        placeGender,
+        placeAgeGroup,
         gunTime: this.normalizeTime(gunTimeText),
         chipTime: getText('chipTime') ? this.normalizeTime(getText('chipTime')) : undefined,
         pacePerMile: getText('pace') || '0:00',

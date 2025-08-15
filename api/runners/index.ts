@@ -27,16 +27,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Transform to match frontend types
       const transformedRunners = runners.map(runner => ({
         id: runner.id,
-        bibNumber: runner.bib_number,
+        bibNumber: runner.bib_number || '', // From series_registrations
         firstName: runner.first_name,
         lastName: runner.last_name,
         gender: runner.gender,
-        age: runner.age,
-        ageGroup: runner.age_group,
-        club: runner.club,
+        age: runner.age || 0, // From series_registrations
+        ageGroup: runner.age_group || '', // From series_registrations
+        club: runner.club || 'MCRRC',
         isActive: runner.is_active,
         createdAt: runner.created_at,
         updatedAt: runner.updated_at,
+        // Additional series info
+        currentSeries: runner.series_name || '',
+        currentYear: runner.year || new Date().getFullYear(),
+        // Race participation count
+        raceCount: parseInt(runner.race_count) || 0,
       }));
 
       return res.status(200).json({

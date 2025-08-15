@@ -28,12 +28,9 @@ export function RunnersListPage() {
     return state.standings.find(s => s.runnerId === runnerId && s.year === state.selectedYear);
   };
 
-  // Get runner's race count for current year
-  const getRunnerRaceCount = (runnerId: string) => {
-    return state.results.filter(r => {
-      const race = state.races.find(race => race.id === r.raceId);
-      return r.runnerId === runnerId && race?.year === state.selectedYear;
-    }).length;
+  // Get runner's race count for current year (now from API data)
+  const getRunnerRaceCount = (runner: any) => {
+    return runner.raceCount || 0;
   };
 
   return (
@@ -144,7 +141,7 @@ export function RunnersListPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {displayRunners.map((runner) => {
           const standing = getRunnerStanding(runner.id);
-          const raceCount = getRunnerRaceCount(runner.id);
+          const raceCount = getRunnerRaceCount(runner);
           
           return (
             <Link key={runner.id} to={`/runner/${runner.id}`}>
@@ -206,6 +203,18 @@ export function RunnersListPage() {
                             {standing.totalPoints}
                           </div>
                           <div className="text-xs text-gray-500">Points</div>
+                        </div>
+                      </div>
+                    ) : raceCount > 0 ? (
+                      <div className="pt-3 border-t border-gray-100 text-center">
+                        <div className="text-lg font-bold text-gray-900 mb-1">
+                          {raceCount}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Race{raceCount !== 1 ? 's' : ''} Completed
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          Standings pending calculation
                         </div>
                       </div>
                     ) : (

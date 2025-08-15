@@ -70,21 +70,43 @@ export const api = {
     // Transform API response to frontend types
     return response.data.map((runner: any) => ({
       id: runner.id,
-      bibNumber: runner.bibNumber || runner.bib_number,
+      bibNumber: runner.bibNumber || runner.bib_number || '',
       firstName: runner.firstName || runner.first_name,
       lastName: runner.lastName || runner.last_name,
       gender: runner.gender,
-      age: runner.age,
-      ageGroup: runner.ageGroup || runner.age_group,
+      age: runner.age || 0,
+      ageGroup: runner.ageGroup || runner.age_group || '',
       club: runner.club || 'MCRRC',
       isActive: runner.isActive ?? runner.is_active ?? true,
       createdAt: runner.createdAt || runner.created_at,
       updatedAt: runner.updatedAt || runner.updated_at,
+      raceCount: runner.raceCount || 0, // Race participation count
     }));
   },
 
+  // Get a specific runner by ID
+  async getRunner(id: string): Promise<Runner> {
+    const response = await apiCall<{ data: any }>(`/runners/${id}`);
+    const runner = response.data;
+    
+    return {
+      id: runner.id,
+      bibNumber: runner.bibNumber || runner.bib_number || '',
+      firstName: runner.firstName || runner.first_name,
+      lastName: runner.lastName || runner.last_name,
+      gender: runner.gender,
+      age: runner.age || 0,
+      ageGroup: runner.ageGroup || runner.age_group || '',
+      club: runner.club || 'MCRRC',
+      isActive: runner.isActive ?? runner.is_active ?? true,
+      createdAt: runner.createdAt || runner.created_at,
+      updatedAt: runner.updatedAt || runner.updated_at,
+      raceCount: runner.raceCount || 0, // Race participation count
+    };
+  },
+
   // Get races by year (optional)
-  async getRaces(year?: number): Promise<Race[]> {
+  async getRaces(year?: number): Promise<any[]> {
     const endpoint = year ? `/races?year=${year}` : '/races';
     const response = await apiCall<{ data: any[]; count: number; year: number | string }>(endpoint);
     
@@ -93,6 +115,7 @@ export const api = {
       name: race.name,
       date: race.date,
       distance: race.distanceMiles ?? race.distance_miles ?? 0,
+      distanceMiles: race.distanceMiles ?? race.distance_miles ?? 0,
       series: race.seriesId || race.series_id || 'default-series',
       year: race.year,
       location: race.location || '',
@@ -101,6 +124,8 @@ export const api = {
       resultsUrl: race.mcrrcUrl || race.mcrrc_url,
       createdAt: race.createdAt || race.created_at,
       updatedAt: race.updatedAt || race.updated_at,
+      // Include summary data for races list page
+      summary: race.summary,
     }));
   },
 
