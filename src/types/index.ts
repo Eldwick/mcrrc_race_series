@@ -144,7 +144,9 @@ export interface SeriesStanding {
   qualifyingRaces: QualifyingRace[]; // Legacy: actual qualifying races data
   raceScores: RacePoints[];   // Individual race point scores
   // Final standing calculation  
-  totalPoints: number;        // Sum of Q highest race scores
+  totalPoints: number;        // Sum of Q highest race scores (for overall category)
+  overallPoints?: number;     // MCRRC: Points from overall M/F placement
+  ageGroupPoints?: number;    // MCRRC: Points from age group M/F placement
   overallRank?: number;       // Overall series placement
   genderRank?: number;        // Gender series placement  
   ageGroupRank?: number;      // Age group series placement

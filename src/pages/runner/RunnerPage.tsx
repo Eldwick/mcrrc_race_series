@@ -162,32 +162,47 @@ export function RunnerPage() {
               </div>
 
               {runnerStanding && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-primary-600">
-                      {formatPlace(runnerStanding.overallRank || 0)}
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-primary-600">
+                        {formatPlace(runnerStanding.overallRank || 0)}
+                      </div>
+                      <div className="text-sm text-gray-600">Overall Rank</div>
                     </div>
-                    <div className="text-sm text-gray-600">Overall Rank</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {runnerStanding.totalPoints}
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {runnerStanding.overallPoints || 0}
+                      </div>
+                      <div className="text-sm text-gray-600">Overall Points</div>
                     </div>
-                    <div className="text-sm text-gray-600">Total Points</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {runnerStanding.racesParticipated}
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {runnerStanding.ageGroupPoints || 0}
+                      </div>
+                      <div className="text-sm text-gray-600">Age Group Points</div>
                     </div>
-                    <div className="text-sm text-gray-600">Races</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {runnerStanding.qualifyingRaces.length}
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-900">
+                        {runnerStanding.racesParticipated}
+                      </div>
+                      <div className="text-sm text-gray-600">Races</div>
                     </div>
-                    <div className="text-sm text-gray-600">Qualifying</div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-gray-900">
+                        {runnerStanding.qualifyingRaces.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Qualifying</div>
+                    </div>
                   </div>
-                </div>
+                  
+                  {/* MCRRC Scoring Explanation */}
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-700">
+                      <strong>MCRRC Championship Series Scoring:</strong> Overall points from top-10 M/F finish &bull; Age Group points from top-10 M/F in age group &bull; Series ranking uses Overall points
+                    </p>
+                  </div>
+                </>
               )}
             </div>
           </div>

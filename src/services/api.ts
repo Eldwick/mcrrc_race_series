@@ -233,6 +233,8 @@ export const api = {
       runnerId: standing.runnerId || standing.runner_id,
       year: standing.year,
       totalPoints: standing.totalPoints ?? standing.total_points ?? 0,
+      overallPoints: standing.overallPoints ?? standing.overall_points ?? 0,
+      ageGroupPoints: standing.ageGroupPoints ?? standing.age_group_points ?? 0,
       racesParticipated: standing.racesParticipated ?? standing.races_participated ?? 0,
       overallRank: standing.overallRank ?? standing.overall_rank ?? (index + 1),
       genderRank: standing.genderRank ?? standing.gender_rank,
