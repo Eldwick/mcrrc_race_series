@@ -116,6 +116,9 @@ export class MCRRCScraper {
       distance = 3.1; // 5K
     } else if (raceName.includes('15k') || raceName.includes('15 k')) {
       distance = 9.3; // 15K
+    } else if (raceName.includes(' mile') && !raceName.includes('miler')) {
+      // Handle "Mile" races (e.g., "Midsummer Night's Mile")
+      distance = 1.0; // 1 mile
     } else {
       // Try to extract numeric distance with units
       const distanceMatch = name.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi|k)/i);
@@ -382,21 +385,56 @@ export class MCRRCScraper {
 
   /**
    * Normalize time format to HH:MM:SS
+   * Handles various time formats including decimal seconds (e.g., "4:29.4")
    */
   private normalizeTime(timeStr: string): string {
     if (!timeStr) return '00:00:00';
     
-    const cleaned = timeStr.replace(/[^\d:]/g, '');
-    const parts = cleaned.split(':');
+    // Handle decimal seconds (e.g., "4:29.4" -> "4:29")
+    // Remove decimal and everything after it for seconds precision
+    let processedTime = timeStr.trim();
+    
+    // If there's a decimal point, truncate to whole seconds
+    if (processedTime.includes('.')) {
+      const parts = processedTime.split('.');
+      if (parts.length >= 2 && parts[1].match(/^\d/)) {
+        // Keep only the integer part of seconds
+        processedTime = parts[0];
+      }
+    }
+    
+    // Clean up: remove everything except digits and colons
+    const cleaned = processedTime.replace(/[^\d:]/g, '');
+    const parts = cleaned.split(':').filter(part => part !== ''); // Remove empty parts
 
-    if (parts.length === 2) {
-      // MM:SS format
-      return `00:${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+    if (parts.length === 1) {
+      // Just seconds (e.g., "150" -> "00:02:30")
+      const totalSeconds = parseInt(parts[0]) || 0;
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `00:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else if (parts.length === 2) {
+      // MM:SS format (e.g., "4:29" -> "00:04:29")
+      const minutes = parseInt(parts[0]) || 0;
+      const seconds = parseInt(parts[1]) || 0;
+      
+      // Validate seconds are in valid range
+      const validSeconds = seconds > 59 ? 59 : seconds;
+      return `00:${minutes.toString().padStart(2, '0')}:${validSeconds.toString().padStart(2, '0')}`;
     } else if (parts.length === 3) {
       // HH:MM:SS format
-      return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:${parts[2].padStart(2, '0')}`;
+      const hours = parseInt(parts[0]) || 0;
+      const minutes = parseInt(parts[1]) || 0;
+      const seconds = parseInt(parts[2]) || 0;
+      
+      // Validate values are in valid ranges
+      const validMinutes = minutes > 59 ? 59 : minutes;
+      const validSeconds = seconds > 59 ? 59 : seconds;
+      
+      return `${hours.toString().padStart(2, '0')}:${validMinutes.toString().padStart(2, '0')}:${validSeconds.toString().padStart(2, '0')}`;
     }
 
+    console.warn(`⚠️ Unable to parse time format: "${timeStr}" -> falling back to 00:00:00`);
     return '00:00:00';
   }
 
@@ -445,56 +483,159 @@ export class MCRRCScraper {
   }
 
   /**
-   * Store scraped race data in database
+   * Find a matching planned race for this scraped race
+   */
+  private async findMatchingPlannedRace(sql: any, scrapedRaceName: string, seriesId: string): Promise<any> {
+    // Get all planned races for this series
+    const plannedRaces = await sql`
+      SELECT id, name, estimated_distance, status
+      FROM planned_races 
+      WHERE series_id = ${seriesId} AND status = 'planned'
+    ` as any[];
+
+    // Simple matching logic - can be enhanced based on race name mappings
+    const scrapedName = scrapedRaceName.toLowerCase().trim();
+    
+    // Look for keyword matches
+    for (const planned of plannedRaces) {
+      const plannedName = planned.name.toLowerCase().trim();
+      
+      // Check if key words match
+      const scrapedWords = scrapedName.split(' ').filter(w => w.length > 3);
+      const plannedWords = plannedName.split(' ').filter(w => w.length > 3);
+      
+      const matchingWords = scrapedWords.filter(word => 
+        plannedWords.some(pWord => 
+          pWord.includes(word) || word.includes(pWord)
+        )
+      );
+      
+      // If at least 50% of significant words match, consider it a match
+      if (matchingWords.length >= Math.ceil(Math.min(scrapedWords.length, plannedWords.length) * 0.5)) {
+        return planned;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Store scraped race data in database (idempotent)
+   * Note: Transaction safety could be added with proper Neon transaction syntax
    */
   async storeRaceData(scrapedRace: ScrapedRace, seriesId: string): Promise<void> {
     const sql = getSql();
     
     try {
-      // 1. Check if race already exists
-      const existingRace = await sql`
-        SELECT id FROM races 
-        WHERE series_id = ${seriesId} AND name = ${scrapedRace.name} AND date = ${scrapedRace.date}
+      console.log(`🏁 Processing race: "${scrapedRace.name}" (${scrapedRace.date})`);
+      
+      // Check if there's a planned race that matches this scraped race
+      const matchingPlannedRace = await this.findMatchingPlannedRace(sql, scrapedRace.name, seriesId);
+      
+      // 1. Check if race already exists - prioritize URL matching, then name/date
+      let existingRace = await sql`
+        SELECT id, planned_race_id, name, date FROM races 
+        WHERE series_id = ${seriesId} AND mcrrc_url = ${scrapedRace.url}
       ` as any[];
 
+      // If no URL match, try name + date match
+      if (existingRace.length === 0) {
+        existingRace = await sql`
+          SELECT id, planned_race_id, name, date FROM races 
+          WHERE series_id = ${seriesId} AND name = ${scrapedRace.name} AND date = ${scrapedRace.date}
+        ` as any[];
+      }
+
       let raceId: string;
+      let isNewRace = false;
       
       if (existingRace.length > 0) {
         // Update existing race
         raceId = existingRace[0].id;
+        const currentPlannedRaceId = existingRace[0].planned_race_id;
+        
         await sql`
           UPDATE races SET
+            name = ${scrapedRace.name},
+            date = ${scrapedRace.date},
+            year = ${new Date(scrapedRace.date).getFullYear()},
             distance_miles = ${scrapedRace.distance || null},
             location = ${scrapedRace.location},
             mcrrc_url = ${scrapedRace.url},
+            planned_race_id = ${matchingPlannedRace?.id || currentPlannedRaceId || null},
             results_scraped_at = NOW(),
             updated_at = NOW()
           WHERE id = ${raceId}
         `;
-        console.log(`Updated existing race with ID: ${raceId}`);
+        
+        console.log(`🔄 Updated existing race "${scrapedRace.name}" (ID: ${raceId})`);
+        
+        // Log what changed if anything
+        const existing = existingRace[0];
+        if (existing.name !== scrapedRace.name) {
+          console.log(`   📝 Name updated: "${existing.name}" → "${scrapedRace.name}"`);
+        }
+        if (existing.date !== scrapedRace.date) {
+          console.log(`   📅 Date updated: ${existing.date} → ${scrapedRace.date}`);
+        }
       } else {
         // Insert new race
         const raceResult = await sql`
-          INSERT INTO races (series_id, name, date, year, distance_miles, location, mcrrc_url, results_scraped_at)
-          VALUES (${seriesId}, ${scrapedRace.name}, ${scrapedRace.date}, ${new Date(scrapedRace.date).getFullYear()}, ${scrapedRace.distance || null}, ${scrapedRace.location}, ${scrapedRace.url}, NOW())
+          INSERT INTO races (series_id, name, date, year, distance_miles, location, mcrrc_url, planned_race_id, results_scraped_at)
+          VALUES (${seriesId}, ${scrapedRace.name}, ${scrapedRace.date}, ${new Date(scrapedRace.date).getFullYear()}, ${scrapedRace.distance || null}, ${scrapedRace.location}, ${scrapedRace.url}, ${matchingPlannedRace?.id || null}, NOW())
           RETURNING id
         ` as any[];
         
         raceId = raceResult[0].id;
-        console.log(`Created new race with ID: ${raceId}`);
+        isNewRace = true;
+        console.log(`✨ Created new race "${scrapedRace.name}" (ID: ${raceId})`);
+        
+        if (matchingPlannedRace) {
+          console.log(`   🔗 Linked to planned race: "${matchingPlannedRace.name}"`);
+        }
+      }
+
+      // If we found a matching planned race, update its status
+      if (matchingPlannedRace && (!existingRace.length || !existingRace[0].planned_race_id)) {
+        await sql`
+          UPDATE planned_races 
+          SET status = 'scraped', updated_at = NOW()
+          WHERE id = ${matchingPlannedRace.id}
+        `;
+        console.log(`📅 Updated planned race "${matchingPlannedRace.name}" status to 'scraped'`);
       }
 
       // 2. Process runners and create series registrations
+      console.log(`👥 Processing ${scrapedRace.runners.length} runners...`);
+      let runnersCreated = 0, runnersUpdated = 0;
       for (const runner of scrapedRace.runners) {
-        await this.storeRunnerData(sql, runner, seriesId);
+        const { created, updated } = await this.storeRunnerData(sql, runner, seriesId);
+        if (created) runnersCreated++;
+        if (updated) runnersUpdated++;
+      }
+      console.log(`   ✨ Created ${runnersCreated} new runners, 🔄 updated ${runnersUpdated} existing runners`);
+
+      // 3. Clean up old race results if re-scraping (for data integrity)
+      if (!isNewRace) {
+        console.log(`🧹 Cleaning up old race results for re-scraping...`);
+        const deletedResults = await sql`
+          DELETE FROM race_results 
+          WHERE race_id = ${raceId}
+        ` as any[];
+        console.log(`   🗑️ Removed ${deletedResults.length || 0} old results`);
       }
 
-      // 3. Store race results
+      // 4. Store new race results
+      console.log(`🏆 Processing ${scrapedRace.results.length} race results...`);
+      let resultsCreated = 0, resultsSkipped = 0;
       for (const result of scrapedRace.results) {
-        await this.storeResultData(sql, result, raceId, seriesId);
+        const { created } = await this.storeResultData(sql, result, raceId, seriesId);
+        if (created) resultsCreated++;
+        else resultsSkipped++;
       }
-
-      console.log(`Stored ${scrapedRace.results.length} race results`);
+      console.log(`   ✨ Created ${resultsCreated} race results, ⏭️ skipped ${resultsSkipped} (missing registrations)`);
+      
+      console.log(`🎉 Successfully processed race "${scrapedRace.name}" with ${scrapedRace.results.length} results`);
 
     } catch (error) {
       console.error('Error storing race data:', error);
@@ -503,9 +644,9 @@ export class MCRRCScraper {
   }
 
   /**
-   * Store or update runner data
+   * Store or update runner data (idempotent)
    */
-  private async storeRunnerData(sql: any, runner: ScrapedRunner, seriesId: string): Promise<void> {
+  private async storeRunnerData(sql: any, runner: ScrapedRunner, seriesId: string): Promise<{created: boolean, updated: boolean}> {
     // Calculate birth year from age (approximate) - age is now guaranteed to exist
     const currentYear = new Date().getFullYear();
     const birthYear = currentYear - runner.age;
@@ -520,6 +661,8 @@ export class MCRRCScraper {
     ` as any[];
 
     let runnerId: string;
+    let runnerCreated = false;
+    let runnerUpdated = false;
 
     if (existingRunner.length > 0) {
       // Update existing runner
@@ -531,6 +674,7 @@ export class MCRRCScraper {
           updated_at = NOW()
         WHERE id = ${runnerId}
       `;
+      runnerUpdated = true;
     } else {
       // Insert new runner
       const runnerResult = await sql`
@@ -540,70 +684,98 @@ export class MCRRCScraper {
       ` as any[];
       
       runnerId = runnerResult[0].id;
+      runnerCreated = true;
     }
 
-    // Check if series registration already exists (by runner_id OR bib_number)
-    const existingRegistration = await sql`
-      SELECT id, runner_id, bib_number FROM series_registrations 
-      WHERE series_id = ${seriesId} 
-        AND (runner_id = ${runnerId} OR bib_number = ${runner.bibNumber})
-    ` as any[];
+    // Handle series registration with robust conflict resolution
+    try {
+      // First, check if this exact runner already has a registration in this series
+      const existingRunnerReg = await sql`
+        SELECT id, bib_number FROM series_registrations 
+        WHERE series_id = ${seriesId} AND runner_id = ${runnerId}
+      ` as any[];
 
-    if (existingRegistration.length > 0) {
-      const reg = existingRegistration[0];
-      
-      // If this is the same runner, just update their registration
-      if (reg.runner_id === runnerId) {
+      if (existingRunnerReg.length > 0) {
+        // This runner already has a registration - update it
+        const regId = existingRunnerReg[0].id;
+        const oldBib = existingRunnerReg[0].bib_number;
+        
         await sql`
           UPDATE series_registrations SET
             bib_number = ${runner.bibNumber},
-            age = ${runner.age || null},
-            age_group = ${ageGroup || null},
+            age = ${runner.age},
+            age_group = ${ageGroup},
             updated_at = NOW()
-          WHERE id = ${reg.id}
+          WHERE id = ${regId}
         `;
-        console.log(`Updated registration for runner ${runnerId} with bib ${runner.bibNumber}`);
+        
+        if (oldBib !== runner.bibNumber) {
+          console.log(`   🔄 Updated bib for ${runner.firstName} ${runner.lastName}: ${oldBib} → ${runner.bibNumber}`);
+        }
+        runnerUpdated = true;
       } else {
-        // Bib number conflict: another runner already has this bib number
-        console.warn(`Bib number conflict: Runner ${runnerId} wants bib ${runner.bibNumber}, but it's already assigned to runner ${reg.runner_id}`);
-        
-        // Check if this runner has any other registration in this series
-        const runnerReg = await sql`
-          SELECT id FROM series_registrations 
-          WHERE series_id = ${seriesId} AND runner_id = ${runnerId}
+        // Check if this bib number is already taken by someone else
+        const bibConflict = await sql`
+          SELECT id, runner_id FROM series_registrations 
+          WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
         ` as any[];
-        
-        if (runnerReg.length > 0) {
-          // Update their existing registration with new bib (will handle conflict resolution)
+
+        if (bibConflict.length > 0) {
+          // Bib number conflict - resolve by updating the conflicting registration
+          const conflictRunnerId = bibConflict[0].runner_id;
+          console.warn(`⚠️ Bib conflict for ${runner.bibNumber}: already assigned to runner ${conflictRunnerId}`);
+          
+          // Get details of the conflicting runner for logging
+          const conflictRunner = await sql`
+            SELECT first_name, last_name FROM runners WHERE id = ${conflictRunnerId}
+          ` as any[];
+          
+          if (conflictRunner.length > 0) {
+            console.warn(`   Current holder: ${conflictRunner[0].first_name} ${conflictRunner[0].last_name}`);
+            console.warn(`   New claimant: ${runner.firstName} ${runner.lastName}`);
+          }
+          
+          // Strategy: Remove the old registration and create new one
+          // This handles cases where bib numbers are reused across races
           await sql`
-            UPDATE series_registrations SET
-              bib_number = ${runner.bibNumber},
-              age = ${runner.age},
-              age_group = ${ageGroup},
-              updated_at = NOW()
-            WHERE id = ${runnerReg[0].id}
+            DELETE FROM series_registrations 
+            WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
           `;
-          console.log(`Updated existing registration for runner ${runnerId}`);
+          console.warn(`   🗑️ Removed conflicting registration`);
+          
+          // Now create the new registration
+          await sql`
+            INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
+            VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
+          `;
+          console.log(`   ✨ Created new registration for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
         } else {
-          // Skip creating duplicate bib registration to avoid constraint violation
-          console.warn(`Skipping registration for runner ${runnerId} due to bib number conflict`);
-          return;
+          // No conflicts - create new registration
+          await sql`
+            INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
+            VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
+          `;
         }
       }
-    } else {
-      // Create new series registration (bib number mapping)
-      await sql`
-        INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
-        VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
-      `;
-      console.log(`Created new registration for runner ${runnerId} with bib ${runner.bibNumber}`);
+    } catch (error) {
+      // Last resort: if we still get a constraint error, log and skip
+      if (error instanceof Error && error.message.includes('duplicate key value violates unique constraint')) {
+        console.error(`❌ Failed to resolve bib conflict for ${runner.firstName} ${runner.lastName} (bib ${runner.bibNumber})`);
+        console.error(`   Skipping this registration to allow scraping to continue`);
+        return { created: runnerCreated, updated: false };
+      } else {
+        // Re-throw other errors
+        throw error;
+      }
     }
+
+    return { created: runnerCreated, updated: runnerUpdated };
   }
 
   /**
-   * Store race result data
+   * Store race result data (idempotent)
    */
-  private async storeResultData(sql: any, result: ScrapedRaceResult, raceId: string, seriesId: string): Promise<void> {
+  private async storeResultData(sql: any, result: ScrapedRaceResult, raceId: string, seriesId: string): Promise<{created: boolean}> {
     // Find the series registration for this bib number
     const registrationResult = await sql`
       SELECT id FROM series_registrations 
@@ -611,8 +783,8 @@ export class MCRRCScraper {
     ` as any[];
 
     if (registrationResult.length === 0) {
-      console.warn(`No series registration found for bib ${result.bibNumber}`);
-      return;
+      console.warn(`⚠️ No registration found for bib ${result.bibNumber} - skipping result`);
+      return { created: false };
     }
 
     const seriesRegistrationId = registrationResult[0].id;
@@ -622,40 +794,19 @@ export class MCRRCScraper {
     const chipTimeInterval = result.chipTime ? this.timeToInterval(result.chipTime) : null;
     const paceInterval = this.timeToInterval(result.pacePerMile);
 
-    // Check if race result already exists
-    const existingResult = await sql`
-      SELECT id FROM race_results 
-      WHERE race_id = ${raceId} AND series_registration_id = ${seriesRegistrationId}
-    ` as any[];
+    // Insert new result (since we cleaned up old ones at race level)
+    await sql`
+      INSERT INTO race_results (
+        race_id, series_registration_id, place, place_gender, place_age_group,
+        gun_time, chip_time, pace_per_mile, is_dnf, is_dq
+      )
+      VALUES (
+        ${raceId}, ${seriesRegistrationId}, ${result.place}, ${result.placeGender}, ${result.placeAgeGroup},
+        ${gunTimeInterval}, ${chipTimeInterval}, ${paceInterval}, ${result.isDNF}, ${result.isDQ}
+      )
+    `;
 
-    if (existingResult.length > 0) {
-      // Update existing result
-      await sql`
-        UPDATE race_results SET
-          place = ${result.place},
-          place_gender = ${result.placeGender},
-          place_age_group = ${result.placeAgeGroup},
-          gun_time = ${gunTimeInterval},
-          chip_time = ${chipTimeInterval},
-          pace_per_mile = ${paceInterval},
-          is_dnf = ${result.isDNF},
-          is_dq = ${result.isDQ},
-          updated_at = NOW()
-        WHERE id = ${existingResult[0].id}
-      `;
-    } else {
-      // Insert new result
-      await sql`
-        INSERT INTO race_results (
-          race_id, series_registration_id, place, place_gender, place_age_group,
-          gun_time, chip_time, pace_per_mile, is_dnf, is_dq
-        )
-        VALUES (
-          ${raceId}, ${seriesRegistrationId}, ${result.place}, ${result.placeGender}, ${result.placeAgeGroup},
-          ${gunTimeInterval}, ${chipTimeInterval}, ${paceInterval}, ${result.isDNF}, ${result.isDQ}
-        )
-      `;
-    }
+    return { created: true };
   }
 
   /**

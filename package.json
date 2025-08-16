@@ -15,6 +15,14 @@
     "migrate:create": "node-pg-migrate create",
     "migrate:status": "node-pg-migrate up --dry-run",
     "migrate:redo": "node-pg-migrate down && node-pg-migrate up",
+    "seed:races": "tsx scripts/seed-championship-series-races.ts",
+    "seed:races:scrape": "tsx scripts/seed-championship-series-races.ts --scrape-completed",
+    "seed:races:planned-only": "tsx scripts/seed-championship-series-races.ts --planned-only",
+    "fix:failed-races": "tsx scripts/fix-failed-races.ts",
+    "diagnose:leaderboard": "tsx scripts/diagnose-leaderboard.ts",
+    "calculate:standings": "tsx scripts/calculate-standings.ts",
+    "test:performance": "tsx scripts/test-performance.ts",
+    "test:time-parsing": "tsx scripts/test-time-parsing.ts",
     "test-scraper": "tsx lib/scraping/test-scraper.ts"
   },
   "dependencies": {

@@ -104,37 +104,53 @@ async function handleDiscoverRaces(year?: number): Promise<any> {
 }
 
 /**
- * Scrape a single race from a URL
+ * Scrape a single race from a URL (idempotent)
  */
 async function handleScrapeRace(url: string, seriesId?: string): Promise<any> {
   if (!url) {
     throw new Error('URL is required for scrape-race action');
   }
 
-  console.log(`Scraping single race: ${url}`);
+  console.log(`🚀 Starting scrape for: ${url}`);
+  const startTime = Date.now();
 
-  // Get or create series
-  const finalSeriesId = await getOrCreateSeries(seriesId);
-  
-  // Scrape the race
-  const scrapedRace = await mcrrcScraper.scrapeRace(url);
-  
-  // Store in database
-  await mcrrcScraper.storeRaceData(scrapedRace, finalSeriesId);
+  try {
+    // Get or create series
+    const finalSeriesId = await getOrCreateSeries(seriesId);
+    console.log(`📊 Using series ID: ${finalSeriesId}`);
+    
+    // Scrape the race
+    const scrapedRace = await mcrrcScraper.scrapeRace(url);
+    
+    // Store in database (with idempotent logic)
+    await mcrrcScraper.storeRaceData(scrapedRace, finalSeriesId);
 
-  return {
-    race: {
-      name: scrapedRace.name,
-      date: scrapedRace.date,
-      distance: scrapedRace.distance,
-      location: scrapedRace.location,
-      url: scrapedRace.url
-    },
-    stats: {
-      runnersFound: scrapedRace.runners.length,
-      resultsFound: scrapedRace.results.length
-    }
-  };
+    const duration = Date.now() - startTime;
+    console.log(`✅ Successfully processed race in ${duration}ms`);
+
+    return {
+      race: {
+        name: scrapedRace.name,
+        date: scrapedRace.date,
+        distance: scrapedRace.distance,
+        location: scrapedRace.location,
+        url: scrapedRace.url
+      },
+      stats: {
+        runnersFound: scrapedRace.runners.length,
+        resultsFound: scrapedRace.results.length
+      },
+      performance: {
+        scrapingTimeMs: duration,
+        idempotent: true
+      }
+    };
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ Failed to scrape race after ${duration}ms:`, error);
+    throw error; // Re-throw to be handled by main handler
+  }
 }
 
 /**
@@ -151,8 +167,22 @@ async function handleScrapeAll(year?: number, seriesId?: string): Promise<any> {
   const urls = await mcrrcScraper.discoverRaceUrls(targetYear);
   console.log(`Found ${urls.length} potential race URLs`);
 
-  const results = [];
-  const errors = [];
+  interface ScrapingResult {
+    url: string;
+    name: string;
+    date: string;
+    runnersFound: number;
+    resultsFound: number;
+    success: boolean;
+  }
+
+  interface ScrapingError {
+    url: string;
+    error: string;
+  }
+
+  const results: ScrapingResult[] = [];
+  const errors: ScrapingError[] = [];
 
   // Scrape each race with some delay to be respectful
   for (let i = 0; i < urls.length; i++) {
@@ -202,7 +232,7 @@ async function handleScrapeAll(year?: number, seriesId?: string): Promise<any> {
 }
 
 /**
- * Get existing series or create new one
+ * Get existing series or create new one (idempotent)
  */
 async function getOrCreateSeries(seriesId?: string, year?: number): Promise<string> {
   const sql = getSql();
@@ -210,15 +240,18 @@ async function getOrCreateSeries(seriesId?: string, year?: number): Promise<stri
 
   if (seriesId) {
     // Verify series exists
-    const existing = await sql`SELECT id FROM series WHERE id = ${seriesId}` as any[];
+    const existing = await sql`SELECT id, name FROM series WHERE id = ${seriesId}` as any[];
     if (existing.length > 0) {
+      console.log(`📋 Using existing series: "${existing[0].name}" (${seriesId})`);
       return seriesId;
+    } else {
+      console.warn(`⚠️ Specified series ID ${seriesId} not found, will find/create series for year ${targetYear}`);
     }
   }
 
-  // Find or create series for the year
+  // Find existing championship series for the year
   let series = await sql`
-    SELECT id FROM series 
+    SELECT id, name FROM series 
     WHERE year = ${targetYear} AND name ILIKE '%championship%'
     ORDER BY created_at DESC
     LIMIT 1
@@ -226,6 +259,7 @@ async function getOrCreateSeries(seriesId?: string, year?: number): Promise<stri
 
   if (series.length === 0) {
     // Create new series for this year
+    console.log(`✨ Creating new championship series for ${targetYear}`);
     const newSeries = await sql`
       INSERT INTO series (name, year, description, is_active)
       VALUES (
@@ -234,10 +268,13 @@ async function getOrCreateSeries(seriesId?: string, year?: number): Promise<stri
         ${`Montgomery County Road Runners Club Championship Series for ${targetYear}`},
         true
       )
-      RETURNING id
-    `;
+      RETURNING id, name
+    ` as any[];
+    
+    console.log(`✅ Created series: "${newSeries[0].name}" (${newSeries[0].id})`);
     return newSeries[0].id;
   }
 
+  console.log(`📋 Using existing series: "${series[0].name}" (${series[0].id})`);
   return series[0].id;
 }

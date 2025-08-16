@@ -384,11 +384,20 @@ export function secondsToInterval(seconds: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-// MCRRC Championship Series Standings Calculation
+// MCRRC Championship Series Standings Calculation (Optimized with Logging)
 export async function calculateMCRRCStandings(seriesId: string, year: number): Promise<void> {
   const sql = getSql();
+  const startTime = Date.now();
   
-  // First, get all races in the series for the year
+  console.log('🏆 Starting MCRRC Championship Series Standings Calculation');
+  console.log(`📊 Series ID: ${seriesId}`);
+  console.log(`📅 Year: ${year}`);
+  console.log('');
+
+  // Step 1: Get race information
+  console.log('📋 Step 1: Fetching race information...');
+  const raceQueryStart = Date.now();
+  
   const races = await sql`
     SELECT id, name, date, distance_miles 
     FROM races 
@@ -396,12 +405,111 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
     ORDER BY date
   `;
 
-  const totalSeriesRaces = (races as any[]).length;
-  if (totalSeriesRaces === 0) return;
+  // Get total series race count (scraped + planned) for proper Q calculation
+  const [scrapedRaceCount, plannedRaceCount] = await Promise.all([
+    sql`SELECT COUNT(*) as count FROM races WHERE series_id = ${seriesId} AND year = ${year}`,
+    sql`SELECT COUNT(*) as count FROM planned_races WHERE series_id = ${seriesId} AND year = ${year}`
+  ]);
 
-  const qualifyingRaces = Math.ceil(totalSeriesRaces / 2); // Q from MCRRC R1
+  const totalSeriesRaces = parseInt((scrapedRaceCount as any[])[0].count) + parseInt((plannedRaceCount as any[])[0].count);
+  const effectiveRaceCount = totalSeriesRaces > 0 ? totalSeriesRaces : (races as any[]).length;
+  
+  if (effectiveRaceCount === 0) {
+    console.log('❌ No races found - nothing to calculate');
+    return;
+  }
 
-  // Get all runners who participated in any race this year  
+  const qualifyingRaces = Math.ceil(effectiveRaceCount / 2); // Q from MCRRC R1
+  
+  console.log(`   ✅ Found ${(races as any[]).length} scraped races`);
+  console.log(`   📊 Total series races (scraped + planned): ${totalSeriesRaces}`);
+  console.log(`   🎯 Qualifying races needed (Q): ${qualifyingRaces}`);
+  console.log(`   ⏱️  Race query time: ${Date.now() - raceQueryStart}ms`);
+  console.log('');
+
+  // Step 2: Pre-calculate race rankings for ALL races (major optimization!)
+  console.log('🏃 Step 2: Pre-calculating race rankings...');
+  const rankingStart = Date.now();
+  
+  const raceRankings = new Map<string, Map<string, { overallRank: number; ageGroupRank: number }>>();
+  
+  for (const race of races as any[]) {
+    console.log(`   🏁 Processing rankings for "${race.name}"...`);
+    
+    // Get all race results with runner info in one optimized query
+    const raceResults = await sql`
+      SELECT 
+        rr.series_registration_id,
+        rr.place,
+        rr.is_dnf,
+        rr.is_dq,
+        r.gender,
+        sr.age_group
+      FROM race_results rr
+      JOIN series_registrations sr ON rr.series_registration_id = sr.id
+      JOIN runners r ON sr.runner_id = r.id
+      WHERE rr.race_id = ${race.id}
+        AND rr.is_dnf = false 
+        AND rr.is_dq = false
+      ORDER BY rr.place
+    ` as any[];
+
+    // Calculate overall gender rankings
+    const maleResults = raceResults.filter(r => r.gender === 'M');
+    const femaleResults = raceResults.filter(r => r.gender === 'F');
+    
+    // Calculate age group rankings by gender
+    const ageGroupRankings = new Map<string, any[]>();
+    for (const result of raceResults) {
+      const key = `${result.gender}-${result.age_group}`;
+      if (!ageGroupRankings.has(key)) {
+        ageGroupRankings.set(key, []);
+      }
+      ageGroupRankings.get(key)!.push(result);
+    }
+
+    // Store rankings for this race
+    const raceRankingMap = new Map<string, { overallRank: number; ageGroupRank: number }>();
+    
+    // Assign overall ranks
+    maleResults.forEach((result, index) => {
+      raceRankingMap.set(result.series_registration_id, { 
+        overallRank: index + 1, 
+        ageGroupRank: 0 // Will be filled below
+      });
+    });
+    
+    femaleResults.forEach((result, index) => {
+      const existing = raceRankingMap.get(result.series_registration_id) || { overallRank: 0, ageGroupRank: 0 };
+      raceRankingMap.set(result.series_registration_id, { 
+        ...existing,
+        overallRank: index + 1
+      });
+    });
+    
+    // Assign age group ranks
+    for (const [key, ageGroupResults] of ageGroupRankings) {
+      ageGroupResults.forEach((result, index) => {
+        const existing = raceRankingMap.get(result.series_registration_id) || { overallRank: 0, ageGroupRank: 0 };
+        raceRankingMap.set(result.series_registration_id, {
+          ...existing,
+          ageGroupRank: index + 1
+        });
+      });
+    }
+    
+    raceRankings.set(race.id, raceRankingMap);
+    console.log(`     ✅ Ranked ${raceResults.length} results`);
+  }
+  
+  console.log(`   ✅ Pre-calculated rankings for ${(races as any[]).length} races`);
+  console.log(`   ⏱️  Ranking calculation time: ${Date.now() - rankingStart}ms`);
+  console.log('');
+
+  // Step 3: Get all participants
+  console.log('👥 Step 3: Fetching participants...');
+  const participantStart = Date.now();
+  
   const participants = await sql`
     SELECT DISTINCT 
       sr.runner_id,
@@ -416,120 +524,171 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
     JOIN race_results rr ON sr.id = rr.series_registration_id
     JOIN races ra ON rr.race_id = ra.id
     WHERE sr.series_id = ${seriesId} AND ra.year = ${year}
-  `;
+  ` as any[];
 
-  // Calculate standings for each participant
-  for (const participant of participants as any[]) {
-    // Get all race results for this runner
-    const raceResults = await sql`
-      SELECT 
-        rr.*,
-        ra.name as race_name,
-        ra.distance_miles,
-        ra.date as race_date
-      FROM race_results rr
-      JOIN races ra ON rr.race_id = ra.id  
-      JOIN series_registrations sr ON rr.series_registration_id = sr.id
-      WHERE sr.runner_id = ${participant.runner_id} 
-        AND sr.series_id = ${seriesId}
-        AND ra.year = ${year}
-      ORDER BY ra.date
-    `;
+  console.log(`   ✅ Found ${participants.length} participants`);
+  console.log(`   ⏱️  Participant query time: ${Date.now() - participantStart}ms`);
+  console.log('');
 
-    // Calculate points for each race
-    const racePointsArray: Array<{ overallPoints: number; ageGroupPoints: number; totalPoints: number }> = [];
-    let totalDistance = 0;
-    let totalTimeSeconds = 0;
+  // Step 4: Process each participant (with optimized queries)
+  console.log('🔄 Step 4: Processing participant standings...');
+  const processingStart = Date.now();
+  
+  const BATCH_SIZE = 10; // Process in batches for better progress reporting
+  let processed = 0;
+  
+  for (let i = 0; i < participants.length; i += BATCH_SIZE) {
+    const batch = participants.slice(i, Math.min(i + BATCH_SIZE, participants.length));
+    const batchStart = Date.now();
+    
+    // Process batch of participants
+    await Promise.all(batch.map(async (participant: any) => {
+      // Get all race results for this runner in one query
+      const raceResults = await sql`
+        SELECT 
+          rr.*,
+          ra.id as race_id,
+          ra.name as race_name,
+          ra.distance_miles,
+          ra.date as race_date
+        FROM race_results rr
+        JOIN races ra ON rr.race_id = ra.id  
+        JOIN series_registrations sr ON rr.series_registration_id = sr.id
+        WHERE sr.runner_id = ${participant.runner_id} 
+          AND sr.series_id = ${seriesId}
+          AND ra.year = ${year}
+        ORDER BY ra.date
+      ` as any[];
 
-    for (const result of raceResults as any[]) {
-      // Calculate race-specific points based on placements
-      const racePoints = await calculateRacePointsForResult(
-        result.race_id,
-        result.series_registration_id,
-        participant.gender,
-        participant.age_group
-      );
+      // Calculate points using pre-calculated rankings
+      const racePointsArray: Array<{ overallPoints: number; ageGroupPoints: number; totalPoints: number }> = [];
+      let totalDistance = 0;
+      let totalTimeSeconds = 0;
 
-      racePointsArray.push(racePoints);
-      totalDistance += parseFloat(result.distance_miles) || 0;
-      
-      // Convert interval to seconds for total time
-      if (result.gun_time) {
-        totalTimeSeconds += intervalToSecondsFromDb(result.gun_time);
+      for (const result of raceResults) {
+        // Get pre-calculated ranking for this race and registration
+        const raceRanking = raceRankings.get(result.race_id);
+        const ranking = raceRanking?.get(result.series_registration_id);
+        
+        if (ranking) {
+          // MCRRC points: 10-9-8-7-6-5-4-3-2-1 for top 10
+          const getPoints = (place: number): number => place <= 10 ? (11 - place) : 0;
+          
+          const overallPoints = getPoints(ranking.overallRank);
+          const ageGroupPoints = getPoints(ranking.ageGroupRank);
+          
+          racePointsArray.push({
+            overallPoints,
+            ageGroupPoints,
+            totalPoints: overallPoints + ageGroupPoints
+          });
+        } else {
+          // Fallback if ranking not found
+          racePointsArray.push({ overallPoints: 0, ageGroupPoints: 0, totalPoints: 0 });
+        }
+
+        totalDistance += parseFloat(result.distance_miles) || 0;
+        
+        // Convert interval to seconds for total time
+        if (result.gun_time) {
+          totalTimeSeconds += intervalToSecondsFromDb(result.gun_time);
+        }
       }
-    }
 
-    // Calculate separate series standings for Overall and Age Group categories
-    // MCRRC R5: Series score = sum of Q highest scores in EACH category separately
-    
-    // Overall category standings (based on overall points only)
-    const overallRaces = [...racePointsArray].sort((a, b) => b.overallPoints - a.overallPoints);
-    const topOverallRaces = overallRaces.slice(0, qualifyingRaces);
-    const totalOverallPoints = topOverallRaces.reduce((sum, race) => sum + race.overallPoints, 0);
-    
-    // Age group category standings (based on age group points only) 
-    const ageGroupRaces = [...racePointsArray].sort((a, b) => b.ageGroupPoints - a.ageGroupPoints);
-    const topAgeGroupRaces = ageGroupRaces.slice(0, qualifyingRaces);
-    const totalAgeGroupPoints = topAgeGroupRaces.reduce((sum, race) => sum + race.ageGroupPoints, 0);
+      // Calculate separate series standings for Overall and Age Group categories
+      const overallRaces = [...racePointsArray].sort((a, b) => b.overallPoints - a.overallPoints);
+      const topOverallRaces = overallRaces.slice(0, qualifyingRaces);
+      const totalOverallPoints = topOverallRaces.reduce((sum, race) => sum + race.overallPoints, 0);
+      
+      const ageGroupRaces = [...racePointsArray].sort((a, b) => b.ageGroupPoints - a.ageGroupPoints);
+      const topAgeGroupRaces = ageGroupRaces.slice(0, qualifyingRaces);
+      const totalAgeGroupPoints = topAgeGroupRaces.reduce((sum, race) => sum + race.ageGroupPoints, 0);
 
-    // Format total time back to interval format
-    const totalTimeFormatted = secondsToInterval(totalTimeSeconds);
+      const totalTimeFormatted = secondsToInterval(totalTimeSeconds);
 
-    // Get the series registration ID
-    const seriesRegistrationResult = await sql`
-      SELECT id FROM series_registrations 
-      WHERE runner_id = ${participant.runner_id} AND series_id = ${seriesId} 
-      LIMIT 1
-    `;
-    
-    if ((seriesRegistrationResult as any[]).length === 0) continue; // Skip if no registration found
-    
-    const seriesRegistrationId = seriesRegistrationResult[0].id;
+      // Get the series registration ID
+      const seriesRegistrationResult = await sql`
+        SELECT id FROM series_registrations 
+        WHERE runner_id = ${participant.runner_id} AND series_id = ${seriesId} 
+        LIMIT 1
+      ` as any[];
+      
+      if (seriesRegistrationResult.length === 0) return;
+      
+      const seriesRegistrationId = seriesRegistrationResult[0].id;
 
-    // Update or insert series standings with separate overall and age group points
-    await sql`
-      INSERT INTO series_standings (
-        series_registration_id,
-        total_points,
-        overall_points,
-        age_group_points,
-        races_participated,
-        total_time,
-        total_distance,
-        last_calculated_at
-      ) VALUES (
-        ${seriesRegistrationId},
-        ${totalOverallPoints}, -- Use overall points for backwards compatibility
-        ${totalOverallPoints},
-        ${totalAgeGroupPoints}, 
-        ${(raceResults as any[]).length},
-        ${totalTimeFormatted}::INTERVAL,
-        ${totalDistance},
-        NOW()
-      )
-      ON CONFLICT (series_registration_id) 
-      DO UPDATE SET
-        total_points = EXCLUDED.total_points,
-        overall_points = EXCLUDED.overall_points,
-        age_group_points = EXCLUDED.age_group_points,
-        races_participated = EXCLUDED.races_participated,
-        total_time = EXCLUDED.total_time,
-        total_distance = EXCLUDED.total_distance,
-        last_calculated_at = EXCLUDED.last_calculated_at
-    `;
+      // Update or insert series standings
+      await sql`
+        INSERT INTO series_standings (
+          series_registration_id,
+          total_points,
+          overall_points,
+          age_group_points,
+          races_participated,
+          total_time,
+          total_distance,
+          last_calculated_at
+        ) VALUES (
+          ${seriesRegistrationId},
+          ${totalOverallPoints},
+          ${totalOverallPoints},
+          ${totalAgeGroupPoints}, 
+          ${raceResults.length},
+          ${totalTimeFormatted}::INTERVAL,
+          ${totalDistance},
+          NOW()
+        )
+        ON CONFLICT (series_registration_id) 
+        DO UPDATE SET
+          total_points = EXCLUDED.total_points,
+          overall_points = EXCLUDED.overall_points,
+          age_group_points = EXCLUDED.age_group_points,
+          races_participated = EXCLUDED.races_participated,
+          total_time = EXCLUDED.total_time,
+          total_distance = EXCLUDED.total_distance,
+          last_calculated_at = EXCLUDED.last_calculated_at
+      `;
+    }));
+    
+    processed += batch.length;
+    const batchTime = Date.now() - batchStart;
+    const progress = Math.round((processed / participants.length) * 100);
+    const avgTimePerRunner = batchTime / batch.length;
+    const estimatedRemaining = Math.round(((participants.length - processed) * avgTimePerRunner) / 1000);
+    
+    console.log(`   📈 Progress: ${processed}/${participants.length} (${progress}%) - Batch time: ${batchTime}ms, Est. remaining: ${estimatedRemaining}s`);
   }
 
-  // Now calculate rankings within each category
+  console.log(`   ✅ Processed all ${participants.length} participants`);
+  console.log(`   ⏱️  Processing time: ${Date.now() - processingStart}ms`);
+  console.log('');
+
+  // Step 5: Calculate final rankings
+  console.log('🏅 Step 5: Calculating final rankings...');
+  const rankingFinalStart = Date.now();
+  
   await calculateSeriesRankings(seriesId, year);
+  
+  console.log(`   ✅ Rankings calculated`);
+  console.log(`   ⏱️  Final ranking time: ${Date.now() - rankingFinalStart}ms`);
+  console.log('');
+
+  const totalTime = Date.now() - startTime;
+  console.log('🎉 MCRRC Championship Series Calculation Complete!');
+  console.log(`⏱️  Total time: ${totalTime}ms (${Math.round(totalTime/1000)}s)`);
+  console.log(`📊 Processed ${participants.length} runners across ${(races as any[]).length} races`);
+  console.log(`🏆 Standings ready for leaderboard display`);
 }
 
-// Helper function to calculate points for a specific race result
+// Legacy function - replaced by optimized in-memory calculation in calculateMCRRCStandings
+// Keeping for backward compatibility if needed elsewhere
 async function calculateRacePointsForResult(
   raceId: string,
   seriesRegistrationId: string,
   gender: string,
   ageGroup: string
 ): Promise<{ overallPoints: number; ageGroupPoints: number; totalPoints: number }> {
+  console.warn('⚠️  Using legacy calculateRacePointsForResult - consider using optimized version');
   const sql = getSql();
 
   // Get overall gender placement (rank among all M or F in this race)
