@@ -10,8 +10,8 @@ export interface ScrapedRunner {
   firstName: string;
   lastName: string;
   gender: 'M' | 'F';
-  age: number;
-  club: string;
+  age?: number; // Optional - only set if available from scraping
+  club?: string; // Optional - only set if available from scraping
 }
 
 export interface ScrapedRaceResult {
@@ -325,8 +325,8 @@ export class MCRRCScraper {
         lastName = parts.slice(1).join(' ') || '';
       }
 
-      // Parse age
-      const age = parseInt(ageText) 
+      // Parse age - only set if valid, otherwise leave undefined
+      const age = ageText && !isNaN(parseInt(ageText)) ? parseInt(ageText) : undefined; 
 
       // Parse gender
       let gender: 'M' | 'F' = 'M';
@@ -334,14 +334,22 @@ export class MCRRCScraper {
         gender = 'F';
       }
 
-      return {
+      const runner: ScrapedRunner = {
         bibNumber,
         firstName,
         lastName,
-        gender,
-        age,
-        club
+        gender
       };
+
+      // Only add age and club if they have valid values
+      if (age !== undefined) {
+        runner.age = age;
+      }
+      if (club && club.trim() !== '') {
+        runner.club = club.trim();
+      }
+
+      return runner;
     } catch (error) {
       console.warn('Error parsing runner row:', error);
       return null;
@@ -474,12 +482,12 @@ export class MCRRCScraper {
    * Store or update runner data
    */
   private async storeRunnerData(sql: any, runner: ScrapedRunner, seriesId: string): Promise<void> {
-    // Calculate birth year from age (approximate)
+    // Calculate birth year from age (approximate) - only if age is available
     const currentYear = new Date().getFullYear();
-    const birthYear = currentYear - runner.age;
+    const birthYear = runner.age ? currentYear - runner.age : null;
     
-    // Calculate age group
-    const ageGroup = this.getAgeGroup(runner.age);
+    // Calculate age group - only if age is available
+    const ageGroup = runner.age ? this.getAgeGroup(runner.age) : null;
 
     // Check if runner already exists
     const existingRunner = await sql`
@@ -495,7 +503,7 @@ export class MCRRCScraper {
       await sql`
         UPDATE runners SET
           gender = ${runner.gender},
-          club = ${runner.club},
+          club = ${runner.club || null},
           updated_at = NOW()
         WHERE id = ${runnerId}
       `;
@@ -503,7 +511,7 @@ export class MCRRCScraper {
       // Insert new runner
       const runnerResult = await sql`
         INSERT INTO runners (first_name, last_name, gender, birth_year, club)
-        VALUES (${runner.firstName}, ${runner.lastName}, ${runner.gender}, ${birthYear}, ${runner.club})
+        VALUES (${runner.firstName}, ${runner.lastName}, ${runner.gender}, ${birthYear}, ${runner.club || null})
         RETURNING id
       ` as any[];
       
@@ -525,8 +533,8 @@ export class MCRRCScraper {
         await sql`
           UPDATE series_registrations SET
             bib_number = ${runner.bibNumber},
-            age = ${runner.age},
-            age_group = ${ageGroup},
+            age = ${runner.age || null},
+            age_group = ${ageGroup || null},
             updated_at = NOW()
           WHERE id = ${reg.id}
         `;
@@ -546,8 +554,8 @@ export class MCRRCScraper {
           await sql`
             UPDATE series_registrations SET
               bib_number = ${runner.bibNumber},
-              age = ${runner.age},
-              age_group = ${ageGroup},
+              age = ${runner.age || null},
+              age_group = ${ageGroup || null},
               updated_at = NOW()
             WHERE id = ${runnerReg[0].id}
           `;
@@ -562,7 +570,7 @@ export class MCRRCScraper {
       // Create new series registration (bib number mapping)
       await sql`
         INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
-        VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
+        VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age || null}, ${ageGroup || null})
       `;
       console.log(`Created new registration for runner ${runnerId} with bib ${runner.bibNumber}`);
     }

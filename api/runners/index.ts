@@ -31,9 +31,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         firstName: runner.first_name,
         lastName: runner.last_name,
         gender: runner.gender,
-        age: runner.age || 0, // From series_registrations
+        age: runner.age, // From series_registrations
         ageGroup: runner.age_group || '', // From series_registrations
-        club: runner.club || 'MCRRC',
+        club: runner.club,
         isActive: runner.is_active,
         createdAt: runner.created_at,
         updatedAt: runner.updated_at,

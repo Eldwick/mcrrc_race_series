@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, Clock, MapPin, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../../components/ui';
-import { formatRunnerName, formatDate, formatTime, formatPlace, getRunnerInitials } from '../../utils';
+import { formatRunnerName, formatDate, formatPlace, getRunnerInitials } from '../../utils';
 import { api } from '../../services/api';
 
 // Helper function to format time objects from API
@@ -21,7 +21,6 @@ export function RunnerPage() {
   const { state } = useData();
   
   // Local state for runner-specific data
-  const [runnerData, setRunnerData] = useState<any>(null);
   const [runnerResults, setRunnerResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +37,9 @@ export function RunnerPage() {
         setLoading(true);
         setError(null);
         
-        // Load runner details and results in parallel
-        const [runnerResponse, resultsResponse] = await Promise.all([
-          api.getRunner(id),
-          api.getRunnerResults(id, state.selectedYear)
-        ]);
+        // Load runner results
+        const resultsResponse = await api.getRunnerResults(id, state.selectedYear);
         
-        setRunnerData(runnerResponse);
         setRunnerResults(resultsResponse);
       } catch (err) {
         console.error('Error loading runner data:', err);
