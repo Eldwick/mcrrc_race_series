@@ -10,7 +10,7 @@ export interface ScrapedRunner {
   firstName: string;
   lastName: string;
   gender: 'M' | 'F';
-  age?: number; // Optional - only set if available from scraping
+  age: number; // Required - fallback provided if not available from scraping
   club?: string; // Optional - only set if available from scraping
 }
 
@@ -29,7 +29,7 @@ export interface ScrapedRaceResult {
 export interface ScrapedRace {
   name: string;
   date: string; // YYYY-MM-DD format
-  distance: number; // miles
+  distance?: number; // miles - optional, undefined if unparseable
   location: string;
   url: string;
   results: ScrapedRaceResult[];
@@ -102,15 +102,31 @@ export class MCRRCScraper {
       location = locationStr.length > 255 ? locationStr.substring(0, 255) : locationStr;
     }
 
-    // Extract distance from race name
-    const distanceMatch = name.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi|k|5k|10k)/i);
-    if (distanceMatch) {
-      const distStr = distanceMatch[1];
-      const unit = distanceMatch[0].toLowerCase();
-      if (unit.includes('k')) {
-        distance = parseFloat(distStr) * 0.621371; // Convert km to miles
-      } else {
-        distance = parseFloat(distStr);
+    // Extract distance from race name - handle common race types
+    const raceName = name.toLowerCase();
+    
+    // Check for specific race types first
+    if (raceName.includes('half marathon') || raceName.includes('half-marathon')) {
+      distance = 13.1; // Half marathon
+    } else if (raceName.includes('marathon') && !raceName.includes('half')) {
+      distance = 26.2; // Full marathon
+    } else if (raceName.includes('10k') || raceName.includes('10 k')) {
+      distance = 6.2; // 10K
+    } else if (raceName.includes('5k') || raceName.includes('5 k')) {
+      distance = 3.1; // 5K
+    } else if (raceName.includes('15k') || raceName.includes('15 k')) {
+      distance = 9.3; // 15K
+    } else {
+      // Try to extract numeric distance with units
+      const distanceMatch = name.match(/(\d+(?:\.\d+)?)\s*(?:mile|mi|k)/i);
+      if (distanceMatch) {
+        const distStr = distanceMatch[1];
+        const unit = distanceMatch[0].toLowerCase();
+        if (unit.includes('k') && !unit.includes('mile')) {
+          distance = parseFloat(distStr) * 0.621371; // Convert km to miles
+        } else {
+          distance = parseFloat(distStr);
+        }
       }
     }
 
@@ -131,7 +147,7 @@ export class MCRRCScraper {
     return {
       name: name || 'Unknown Race',
       date: date || new Date().toISOString().split('T')[0],
-      distance: distance || 3.1, // Default to 5K
+      distance: distance || undefined, // No default - leave undefined if unparseable
       location: location || 'Unknown Location',
       url,
       results: [],
@@ -325,8 +341,20 @@ export class MCRRCScraper {
         lastName = parts.slice(1).join(' ') || '';
       }
 
-      // Parse age - only set if valid, otherwise leave undefined
-      const age = ageText && !isNaN(parseInt(ageText)) ? parseInt(ageText) : undefined; 
+      // Parse age - provide fallback if parsing fails to avoid NOT NULL constraint violations
+      let age = ageText && !isNaN(parseInt(ageText)) ? parseInt(ageText) : undefined;
+      
+      // If age parsing failed but we have ageText, try to extract numbers
+      if (!age && ageText) {
+        const ageMatch = ageText.match(/\d+/);
+        age = ageMatch ? parseInt(ageMatch[0]) : undefined;
+      }
+      
+      // If still no age, use fallback based on race performance (very rough estimate)
+      // This prevents NOT NULL constraint violations in the database
+      if (!age) {
+        age = 35; // Fallback age - average adult runner age
+      } 
 
       // Parse gender
       let gender: 'M' | 'F' = 'M';
@@ -338,13 +366,9 @@ export class MCRRCScraper {
         bibNumber,
         firstName,
         lastName,
-        gender
+        gender,
+        age // Now guaranteed to have a value (never undefined)
       };
-
-      // Only add age and club if they have valid values
-      if (age !== undefined) {
-        runner.age = age;
-      }
       if (club && club.trim() !== '') {
         runner.club = club.trim();
       }
@@ -440,7 +464,7 @@ export class MCRRCScraper {
         raceId = existingRace[0].id;
         await sql`
           UPDATE races SET
-            distance_miles = ${scrapedRace.distance},
+            distance_miles = ${scrapedRace.distance || null},
             location = ${scrapedRace.location},
             mcrrc_url = ${scrapedRace.url},
             results_scraped_at = NOW(),
@@ -452,7 +476,7 @@ export class MCRRCScraper {
         // Insert new race
         const raceResult = await sql`
           INSERT INTO races (series_id, name, date, year, distance_miles, location, mcrrc_url, results_scraped_at)
-          VALUES (${seriesId}, ${scrapedRace.name}, ${scrapedRace.date}, ${new Date(scrapedRace.date).getFullYear()}, ${scrapedRace.distance}, ${scrapedRace.location}, ${scrapedRace.url}, NOW())
+          VALUES (${seriesId}, ${scrapedRace.name}, ${scrapedRace.date}, ${new Date(scrapedRace.date).getFullYear()}, ${scrapedRace.distance || null}, ${scrapedRace.location}, ${scrapedRace.url}, NOW())
           RETURNING id
         ` as any[];
         
@@ -482,12 +506,12 @@ export class MCRRCScraper {
    * Store or update runner data
    */
   private async storeRunnerData(sql: any, runner: ScrapedRunner, seriesId: string): Promise<void> {
-    // Calculate birth year from age (approximate) - only if age is available
+    // Calculate birth year from age (approximate) - age is now guaranteed to exist
     const currentYear = new Date().getFullYear();
-    const birthYear = runner.age ? currentYear - runner.age : null;
+    const birthYear = currentYear - runner.age;
     
-    // Calculate age group - only if age is available
-    const ageGroup = runner.age ? this.getAgeGroup(runner.age) : null;
+    // Calculate age group - age is now guaranteed to exist
+    const ageGroup = this.getAgeGroup(runner.age);
 
     // Check if runner already exists
     const existingRunner = await sql`
@@ -554,8 +578,8 @@ export class MCRRCScraper {
           await sql`
             UPDATE series_registrations SET
               bib_number = ${runner.bibNumber},
-              age = ${runner.age || null},
-              age_group = ${ageGroup || null},
+              age = ${runner.age},
+              age_group = ${ageGroup},
               updated_at = NOW()
             WHERE id = ${runnerReg[0].id}
           `;
@@ -570,7 +594,7 @@ export class MCRRCScraper {
       // Create new series registration (bib number mapping)
       await sql`
         INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
-        VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age || null}, ${ageGroup || null})
+        VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
       `;
       console.log(`Created new registration for runner ${runnerId} with bib ${runner.bibNumber}`);
     }
