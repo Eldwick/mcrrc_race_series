@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Calendar, MapPin, Trophy, Users, Loader2, ExternalLink } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../../components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Select, Input } from '../../components/ui';
 import { formatDate, formatTime, formatPlace, formatRunnerName, getRunnerInitials, StyledPlace } from '../../utils';
 import { api, ApiError } from '../../services/api';
+import { useData } from '../../contexts/DataContext';
 import type { Race } from '../../types';
 
 interface RaceResult {
@@ -32,10 +33,18 @@ interface RaceResult {
 
 export function RacePage() {
   const { id } = useParams<{ id: string }>();
+  const { availableAgeGroups } = useData();
   const [race, setRace] = useState<Race | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Filter state
+  const [filters, setFilters] = useState({
+    gender: 'all' as 'all' | 'M' | 'F',
+    ageGroup: 'overall' as string,
+    searchText: ''
+  });
 
   useEffect(() => {
     const fetchRaceData = async () => {
@@ -71,6 +80,35 @@ export function RacePage() {
 
     fetchRaceData();
   }, [id]);
+
+  // Filter race results based on current filters
+  const filteredResults = raceResults.filter(result => {
+    // Gender filter
+    const matchesGender = filters.gender === 'all' || result.runner.gender === filters.gender;
+    
+    // Age group filter
+    const matchesAgeGroup = filters.ageGroup === 'overall' || result.runner.ageGroup === filters.ageGroup;
+    
+    // Search filter
+    const matchesSearch = filters.searchText === '' ||
+      `${result.runner.firstName} ${result.runner.lastName}`.toLowerCase().includes(filters.searchText.toLowerCase()) ||
+      result.runner.bibNumber.toLowerCase().includes(filters.searchText.toLowerCase());
+    
+    return matchesGender && matchesAgeGroup && matchesSearch;
+  });
+
+  // Filter handlers
+  const handleGenderChange = (gender: 'all' | 'M' | 'F') => {
+    setFilters(prev => ({ ...prev, gender }));
+  };
+
+  const handleAgeGroupChange = (ageGroup: string) => {
+    setFilters(prev => ({ ...prev, ageGroup }));
+  };
+
+  const handleSearchChange = (searchText: string) => {
+    setFilters(prev => ({ ...prev, searchText }));
+  };
 
   if (loading) {
     return (
@@ -204,24 +242,94 @@ export function RacePage() {
       {/* Results */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Race Results</CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-gray-500" />
-                <span className="text-sm text-gray-600">{raceResults.length} participants</span>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Race Results</CardTitle>
+                <p className="text-sm text-gray-600 mt-1">
+                  {filters.gender === 'all' ? 'All Participants' : 
+                   filters.gender === 'M' ? "Men's Results" : "Women's Results"}
+                  {filters.ageGroup !== 'overall' && ` • ${filters.ageGroup} Age Group`}
+                </p>
               </div>
-              {race.raceUrl && (
-                <a
-                  href={race.raceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Source
-                </a>
-              )}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-gray-500" />
+                  <span className="text-sm text-gray-600">
+                    {filteredResults.length} of {raceResults.length} participants
+                  </span>
+                </div>
+                {race.raceUrl && (
+                  <a
+                    href={race.raceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Source
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Controls */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-wrap gap-4">
+                  {/* Gender Filter */}
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                    <Button
+                      variant={filters.gender === 'all' ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleGenderChange('all')}
+                      className="rounded-none border-r"
+                    >
+                      All
+                    </Button>
+                    <Button
+                      variant={filters.gender === 'M' ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleGenderChange('M')}
+                      className="rounded-none border-r"
+                    >
+                      Men
+                    </Button>
+                    <Button
+                      variant={filters.gender === 'F' ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => handleGenderChange('F')}
+                      className="rounded-none"
+                    >
+                      Women
+                    </Button>
+                  </div>
+
+                  {/* Age Group Filter */}
+                  <Select
+                    value={filters.ageGroup}
+                    onChange={(e) => handleAgeGroupChange(e.target.value)}
+                    className="min-w-32"
+                  >
+                    <option value="overall">Overall</option>
+                    {availableAgeGroups.map(ageGroup => (
+                      <option key={ageGroup} value={ageGroup}>
+                        {ageGroup}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                {/* Search */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Search runners..."
+                    value={filters.searchText}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="w-48"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -231,6 +339,14 @@ export function RacePage() {
               <Trophy className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No results available</h3>
               <p className="text-gray-600">Results for this race haven't been uploaded yet.</p>
+            </div>
+          ) : filteredResults.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No matching results</h3>
+              <p className="text-gray-600">
+                No runners match the current filters. Try adjusting your filters to see more results.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -247,7 +363,7 @@ export function RacePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {raceResults.map((result) => {
+                  {filteredResults.map((result) => {
                     const { runner } = result;
                     
                     return (

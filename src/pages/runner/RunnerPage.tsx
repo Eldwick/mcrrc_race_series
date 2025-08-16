@@ -158,12 +158,20 @@ export function RunnerPage() {
 
               {runnerStanding && (
                 <>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-primary-600">
-                        {formatPlace(runnerStanding.overallRank || 0)}
+                      <div className="flex justify-center mb-1">
+                        <StyledPlace place={runnerStanding.overallRank || 0} formatPlace={formatPlace} />
                       </div>
                       <div className="text-sm text-gray-600">Overall Rank</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="flex justify-center mb-1">
+                        <StyledPlace place={runnerStanding.ageGroupRank || 0} formatPlace={formatPlace} />
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {runner.ageGroup} Rank
+                      </div>
                     </div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-blue-600">
@@ -194,7 +202,7 @@ export function RunnerPage() {
                   {/* MCRRC Scoring Explanation */}
                   <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                     <p className="text-sm text-gray-700">
-                      <strong>MCRRC Championship Series Scoring:</strong> Overall points from top-10 M/F finish &bull; Age Group points from top-10 M/F in age group &bull; Series ranking uses Overall points
+                      <strong>MCRRC Championship Series Scoring:</strong> Overall points from top-10 M/F finish &bull; Age Group points from top-10 M/F in age group &bull; Overall rank uses Overall points, Age Group rank uses Age Group points
                     </p>
                   </div>
                 </>
