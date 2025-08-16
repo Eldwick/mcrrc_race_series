@@ -306,8 +306,7 @@ export class MCRRCScraper {
       const fullName = getText('name');
       const ageText = getText('age');
       const genderText = getText('gender');
-      const clubText = getText('club');
-      const cityText = getText('city');
+      const club = getText('club');
 
       if (!fullName) return null;
 
@@ -327,18 +326,12 @@ export class MCRRCScraper {
       }
 
       // Parse age
-      const age = parseInt(ageText) || 25; // Default age if not found
+      const age = parseInt(ageText) 
 
       // Parse gender
       let gender: 'M' | 'F' = 'M';
       if (genderText && (genderText.toLowerCase().includes('f') || genderText.toLowerCase().includes('w'))) {
         gender = 'F';
-      }
-
-      // Determine club - prefer explicit club field, otherwise use default
-      let club = 'MCRRC'; // Default for MCRRC races
-      if (clubText && clubText.length > 0 && !cityText.includes(clubText)) {
-        club = clubText;
       }
 
       return {
