@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, Clock, MapPin, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../../components/ui';
-import { formatRunnerName, formatDate, formatPlace, getRunnerInitials } from '../../utils';
+import { formatRunnerName, formatDate, formatPlace, getRunnerInitials, StyledPlace } from '../../utils';
 import { api } from '../../services/api';
 
 // Helper function to format time objects from API
@@ -250,8 +250,8 @@ export function RunnerPage() {
                         <Badge variant="destructive">DQ</Badge>
                       ) : (
                         <div className="text-right">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {formatPlace(result.place)}
+                          <div className="flex justify-end mb-1">
+                            <StyledPlace place={result.place} formatPlace={formatPlace} />
                           </div>
                           <div className="text-sm text-gray-600">Overall</div>
                         </div>
@@ -272,11 +272,15 @@ export function RunnerPage() {
                       </div>
                       <div>
                         <div className="text-gray-600">Gender Place</div>
-                        <div className="font-medium">{formatPlace(result.placeGender)}</div>
+                        <div className="font-medium">
+                          <StyledPlace place={result.placeGender} formatPlace={formatPlace} />
+                        </div>
                       </div>
                       <div>
                         <div className="text-gray-600">Age Group</div>
-                        <div className="font-medium">{formatPlace(result.placeAgeGroup)}</div>
+                        <div className="font-medium">
+                          <StyledPlace place={result.placeAgeGroup} formatPlace={formatPlace} />
+                        </div>
                       </div>
                     </div>
 

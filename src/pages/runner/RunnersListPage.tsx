@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Search, Trophy, Calendar } from 'lucide-react';
+import { Users, Search, Calendar } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardContent, Input, Select, Badge } from '../../components/ui';
-import { formatRunnerName, getRunnerInitials } from '../../utils';
+import { formatRunnerName, getRunnerInitials, getRankIcon } from '../../utils';
 
 export function RunnersListPage() {
   const { state, filteredRunners, availableAgeGroups } = useData();
@@ -164,13 +164,7 @@ export function RunnersListPage() {
                       </div>
                     </div>
                     
-                    {standing?.overallRank && standing.overallRank <= 3 && (
-                      <Trophy className={`w-5 h-5 ${
-                        standing.overallRank === 1 ? 'text-yellow-500' :
-                        standing.overallRank === 2 ? 'text-gray-400' :
-                        'text-amber-600'
-                      }`} />
-                    )}
+                    {standing?.overallRank && getRankIcon(standing.overallRank)}
                   </div>
 
                   <div className="space-y-3">

@@ -29,19 +29,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // Get race summaries for each race (with top results)
       const transformedRaces = await Promise.all(races.map(async (race) => {
-        const summary = await getRaceSummary(race.id);
+        // Only get summary for scraped races that have results
+        let summary = { totalParticipants: 0, completed: 0, dnfDq: 0, topResults: [] };
+        let topResults: any[] = [];
         
-        // Transform top results
-        const topResults = summary.topResults.map((result: any) => ({
-          place: result.place,
-          firstName: result.first_name,
-          lastName: result.last_name,
-          gender: result.gender,
-          ageGroup: result.age_group,
-          bibNumber: result.bib_number,
-          gunTime: formatTimeFromInterval(result.gun_time),
-          genderRank: result.gender_rank
-        }));
+        if (race.race_status === 'scraped') {
+          try {
+            const raceSummary = await getRaceSummary(race.id);
+            summary = raceSummary;
+            
+            // Transform top results
+            topResults = summary.topResults.map((result: any) => ({
+              place: result.place,
+              firstName: result.first_name,
+              lastName: result.last_name,
+              gender: result.gender,
+              ageGroup: result.age_group,
+              bibNumber: result.bib_number,
+              gunTime: formatTimeFromInterval(result.gun_time),
+              genderRank: result.gender_rank
+            }));
+          } catch (error) {
+            // If getRaceSummary fails for a scraped race, log but continue
+            console.warn(`Failed to get summary for scraped race ${race.name}:`, error);
+          }
+        }
 
         return {
           id: race.id,
@@ -53,6 +65,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           location: race.location,
           courseType: race.course_type,
           mcrrcUrl: race.mcrrc_url,
+          raceStatus: race.race_status,
+          resultsScrapedAt: race.results_scraped_at,
+          notes: race.notes,
+          plannedRaceId: race.planned_race_id,
           createdAt: race.created_at,
           updatedAt: race.updated_at,
           // Race summary data

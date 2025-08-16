@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Trophy, Users, Clock, Loader2 } from 'lucide-react';
+import { Calendar, MapPin, Trophy, Users, Clock, Loader2, ExternalLink } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardContent, Badge } from '../../components/ui';
 import { formatDate, formatRunnerName, getRunnerInitials } from '../../utils';
@@ -11,10 +11,14 @@ interface RaceWithSummary {
   name: string;
   date: string;
   year: number;
-  distanceMiles: number;
-  location: string;
-  mcrrcUrl: string;
-  summary?: {
+  distanceMiles: number | null;
+  location: string | null;
+  mcrrcUrl: string | null;
+  raceStatus: 'scraped' | 'planned' | 'cancelled';
+  resultsScrapedAt: string | null;
+  notes: string | null;
+  plannedRaceId: string | null;
+  summary: {
     totalParticipants: number;
     completed: number;
     dnfDq: number;
@@ -55,10 +59,7 @@ export function RacesListPage() {
     fetchRaces();
   }, [state.selectedYear]);
 
-  // Check if race has passed
-  const isRacePast = (raceDate: string) => {
-    return new Date(raceDate) < new Date();
-  };
+
 
   if (loading) {
     return (
@@ -134,7 +135,7 @@ export function RacesListPage() {
           <CardContent className="flex items-center justify-between p-6">
             <div>
               <h3 className="text-2xl font-bold text-gray-900">
-                {currentYearRaces.filter(r => isRacePast(r.date)).length}
+                {currentYearRaces.filter(r => r.raceStatus === 'scraped').length}
               </h3>
               <p className="text-sm text-gray-600">Completed</p>
             </div>
@@ -146,7 +147,7 @@ export function RacesListPage() {
           <CardContent className="flex items-center justify-between p-6">
             <div>
               <h3 className="text-2xl font-bold text-gray-900">
-                {currentYearRaces.filter(r => !isRacePast(r.date)).length}
+                {currentYearRaces.filter(r => r.raceStatus === 'planned').length}
               </h3>
               <p className="text-sm text-gray-600">Upcoming</p>
             </div>
@@ -181,11 +182,12 @@ export function RacesListPage() {
           </Card>
         ) : (
           currentYearRaces.map((race) => {
-            const isPast = isRacePast(race.date);
-            const summary = race.summary || { totalParticipants: 0, completed: 0, dnfDq: 0, topResults: [] };
-            const hasResults = summary.totalParticipants > 0;
+            const isScraped = race.raceStatus === 'scraped';
+            const isPlanned = race.raceStatus === 'planned';
+            const summary = race.summary;
+            const hasResults = isScraped && summary.totalParticipants > 0;
             
-            return (
+            return isScraped ? (
               <Link key={race.id} to={`/race/${race.id}`}>
                 <Card className="hover:shadow-md transition-shadow cursor-pointer">
                   <CardContent className="p-6">
@@ -199,32 +201,45 @@ export function RacesListPage() {
                             <Calendar className="w-4 h-4" />
                             {formatDate(race.date)}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <MapPin className="w-4 h-4" />
-                            {race.location}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Trophy className="w-4 h-4" />
-                            {race.distanceMiles} miles
-                          </div>
+                          {race.location && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-4 h-4" />
+                              {race.location}
+                            </div>
+                          )}
+                          {race.distanceMiles && (
+                            <div className="flex items-center gap-1">
+                              <Trophy className="w-4 h-4" />
+                              {race.distanceMiles} miles
+                            </div>
+                          )}
                         </div>
                       </div>
                       
                       <div className="flex flex-col items-end gap-2">
-                        <Badge 
-                          variant={isPast ? "secondary" : "outline"}
-                          size="sm"
-                        >
-                          {isPast ? "Completed" : "Upcoming"}
+                        <Badge variant="secondary" size="sm">
+                          Completed
                         </Badge>
                         <Badge variant="success" size="sm">
                           Official
                         </Badge>
+                        {race.mcrrcUrl && (
+                          <a
+                            href={race.mcrrcUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()} // Prevent card navigation
+                            className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded-md hover:bg-primary-50 transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Official Results
+                          </a>
+                        )}
                       </div>
                     </div>
 
-                    {/* Race Results */}
-                    {isPast && hasResults ? (
+                    {/* Race Results - Only for scraped races */}
+                    {hasResults ? (
                       <div className="pt-4 border-t border-gray-200">
                         {/* Stats Row */}
                         <div className="grid grid-cols-3 gap-4 mb-4">
@@ -318,15 +333,6 @@ export function RacesListPage() {
                           </div>
                         )}
                       </div>
-                    ) : !isPast ? (
-                      <div className="pt-4 border-t border-gray-200">
-                        <div className="flex items-center justify-center text-gray-500">
-                          <Clock className="w-4 h-4 mr-2" />
-                          <span className="text-sm">
-                            {Math.ceil((new Date(race.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days until race
-                          </span>
-                        </div>
-                      </div>
                     ) : (
                       <div className="pt-4 border-t border-gray-200">
                         <div className="flex items-center justify-center text-gray-500">
@@ -337,6 +343,68 @@ export function RacesListPage() {
                   </CardContent>
                 </Card>
               </Link>
+            ) : (
+              <div key={race.id}>
+                <Card className="cursor-default">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                          {race.name}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            {formatDate(race.date)}
+                          </div>
+                          {race.location && (
+                            <div className="flex items-center gap-1">
+                              <MapPin className="w-4 h-4" />
+                              {race.location}
+                            </div>
+                          )}
+                          {race.distanceMiles && (
+                            <div className="flex items-center gap-1">
+                              <Trophy className="w-4 h-4" />
+                              {race.distanceMiles} miles
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-2">
+                        {isPlanned ? (
+                          <Badge variant="outline" size="sm">
+                            Upcoming
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" size="sm">
+                            Cancelled
+                          </Badge>
+                        )}
+                        <Badge variant="success" size="sm">
+                          Official
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Planned race info */}
+                    {isPlanned && (
+                      <div className="pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-center text-gray-500">
+                          <Clock className="w-4 h-4 mr-2" />
+                          <span className="text-sm">
+                            {race.date && Math.ceil((new Date(race.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) > 0
+                              ? `${Math.ceil((new Date(race.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days until race`
+                              : 'Race details to be announced'
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             );
           })
         )}

@@ -1,9 +1,7 @@
 // API client for MCRRC Race Series
 import type { Runner, Race, SeriesStanding, Series } from '../types';
 
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? '/api'  // Production uses relative URLs
-  : 'http://localhost:3000/api'; // Development uses full URL
+const API_BASE_URL = '/api'; // Use relative URLs for both dev and production (Vite proxies to backend)
 
 // Generic API error class
 export class ApiError extends Error {
@@ -156,6 +154,11 @@ export const api = {
       isOfficial: true, // Assume all races from API are official
       raceUrl: race.mcrrcUrl || race.mcrrc_url,
       resultsUrl: race.mcrrcUrl || race.mcrrc_url,
+      mcrrcUrl: race.mcrrcUrl || race.mcrrc_url, // Also map this for RacesListPage
+      raceStatus: race.raceStatus || 'scraped', // Map race status field
+      resultsScrapedAt: race.resultsScrapedAt,
+      notes: race.notes,
+      plannedRaceId: race.plannedRaceId,
       createdAt: race.createdAt || race.created_at,
       updatedAt: race.updatedAt || race.updated_at,
       // Include summary data for races list page

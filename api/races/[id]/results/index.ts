@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const transformedResults = raceResults.map(result => ({
       id: result.id,
       raceId: result.race_id,
-      runnerId: result.series_registration_id, // Using registration ID for now
+      runnerId: result.runner_id, // Use actual runner ID
       bibNumber: result.bib_number,
       place: result.place,
       placeGender: result.place_gender || 0,
@@ -58,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updatedAt: result.updated_at,
       // Runner details - these should be available from the query
       runner: {
-        id: result.series_registration_id,
+        id: result.runner_id, // Use actual runner ID
         firstName: result.first_name,
         lastName: result.last_name,
         gender: result.gender,

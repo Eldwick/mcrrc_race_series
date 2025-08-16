@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Medal, Award, Filter, Search, Calendar, Loader2 } from 'lucide-react';
+import { Trophy, Medal, Filter, Search, Calendar, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Input, Select, Badge, Button } from '../../components/ui';
-import { formatPlace, formatRunnerName, getRunnerInitials } from '../../utils';
+import { formatPlace, formatRunnerName, getRunnerInitials, StyledPlace } from '../../utils';
 
 interface MCRRCStanding {
   id: string;
@@ -111,18 +111,7 @@ export function LeaderboardPage() {
     setFilters(prev => ({ ...prev, year }));
   };
 
-  const getRankIcon = (rank: number) => {
-    if (rank === 1) return <Trophy className="w-5 h-5 text-yellow-500" />;
-    if (rank === 2) return <Medal className="w-5 h-5 text-gray-400" />;
-    if (rank === 3) return <Award className="w-5 h-5 text-amber-600" />;
-    return null;
-  };
 
-  const getRankBadgeVariant = (rank: number) => {
-    if (rank <= 3) return 'success';
-    if (rank <= 10) return 'secondary';
-    return 'outline';
-  };
 
   return (
     <div className="space-y-6">
@@ -358,12 +347,7 @@ export function LeaderboardPage() {
                     return (
                       <tr key={standing.id} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-4 px-2">
-                          <div className="flex items-center gap-2">
-                            {getRankIcon(finalRank)}
-                            <Badge variant={getRankBadgeVariant(finalRank)}>
-                              {formatPlace(finalRank)}
-                            </Badge>
-                          </div>
+                          <StyledPlace place={finalRank} formatPlace={formatPlace} />
                         </td>
                         
                         <td className="py-4 px-2">

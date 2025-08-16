@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Trophy, Users, Loader2 } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Trophy, Users, Loader2, ExternalLink } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '../../components/ui';
-import { formatDate, formatTime, formatPlace, formatRunnerName, getRunnerInitials } from '../../utils';
+import { formatDate, formatTime, formatPlace, formatRunnerName, getRunnerInitials, StyledPlace } from '../../utils';
 import { api, ApiError } from '../../services/api';
 import type { Race } from '../../types';
 
@@ -159,6 +159,24 @@ export function RacePage() {
               <Badge variant="outline">{race.year}</Badge>
               {race.isOfficial && <Badge variant="success">Official</Badge>}
             </div>
+
+            {/* Official Race Results Link */}
+            {race.raceUrl && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <a
+                  href={race.raceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg text-primary-700 hover:text-primary-800 transition-colors font-medium"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Official Results on MCRRC.org
+                </a>
+                <p className="text-sm text-gray-500 mt-2">
+                  Access the original race results page for additional details and timing information.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Race Stats */}
@@ -188,9 +206,22 @@ export function RacePage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Race Results</CardTitle>
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-gray-500" />
-              <span className="text-sm text-gray-600">{raceResults.length} participants</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-gray-500" />
+                <span className="text-sm text-gray-600">{raceResults.length} participants</span>
+              </div>
+              {race.raceUrl && (
+                <a
+                  href={race.raceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Source
+                </a>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -227,9 +258,7 @@ export function RacePage() {
                           ) : result.isDQ ? (
                             <Badge variant="destructive" size="sm">DQ</Badge>
                           ) : (
-                            <Badge variant="outline" size="sm">
-                              {formatPlace(result.place)}
-                            </Badge>
+                            <StyledPlace place={result.place} formatPlace={formatPlace} />
                           )}
                         </td>
                         
@@ -260,8 +289,8 @@ export function RacePage() {
                             <Badge variant="secondary" size="sm">
                               {runner.gender}
                             </Badge>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatPlace(result.placeGender)}
+                            <div className="mt-1 flex justify-center">
+                              <StyledPlace place={result.placeGender} formatPlace={formatPlace} />
                             </div>
                           </div>
                         </td>
@@ -271,8 +300,8 @@ export function RacePage() {
                             <Badge variant="secondary" size="sm">
                               {runner.ageGroup}
                             </Badge>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatPlace(result.placeAgeGroup)}
+                            <div className="mt-1 flex justify-center">
+                              <StyledPlace place={result.placeAgeGroup} formatPlace={formatPlace} />
                             </div>
                           </div>
                         </td>

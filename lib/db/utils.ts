@@ -21,10 +21,14 @@ export interface DbRace {
   name: string;
   date: string;
   year: number;
-  distance_miles: number;
-  location: string;
-  course_type: string;
-  mcrrc_url: string;
+  distance_miles: number | null;
+  location: string | null;
+  course_type: string | null;
+  mcrrc_url: string | null;
+  results_scraped_at: string | null;
+  notes: string | null;
+  race_status: 'scraped' | 'planned' | 'cancelled';
+  planned_race_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,7 +91,7 @@ export async function getAllRunners(): Promise<any[]> {
       WHERE ra.year = EXTRACT(year FROM CURRENT_DATE)
       GROUP BY sr2.runner_id
     ) race_counts ON r.id = race_counts.runner_id
-    WHERE r.is_active = true 
+    WHERE (r.is_active IS NULL OR r.is_active = true) 
     ORDER BY r.id, s.year DESC, sr.created_at DESC
   `;
   return result as any[];
@@ -117,7 +121,7 @@ export async function getRunnerById(id: string): Promise<any | null> {
       WHERE ra.year = EXTRACT(year FROM CURRENT_DATE)
       GROUP BY sr2.runner_id
     ) race_counts ON r.id = race_counts.runner_id
-    WHERE r.id = ${id} AND r.is_active = true
+    WHERE r.id = ${id}
     ORDER BY s.year DESC, sr.created_at DESC
     LIMIT 1
   ` as any[];
@@ -140,7 +144,7 @@ export async function getRunnerByBibNumber(bibNumber: string, seriesId?: string)
       FROM runners r
       JOIN series_registrations sr ON r.id = sr.runner_id
       JOIN series s ON sr.series_id = s.id
-      WHERE sr.bib_number = ${bibNumber} AND sr.series_id = ${seriesId} AND r.is_active = true
+      WHERE sr.bib_number = ${bibNumber} AND sr.series_id = ${seriesId} AND (r.is_active IS NULL OR r.is_active = true)
       LIMIT 1
     `;
   } else {
@@ -156,7 +160,7 @@ export async function getRunnerByBibNumber(bibNumber: string, seriesId?: string)
       FROM runners r
       JOIN series_registrations sr ON r.id = sr.runner_id
       JOIN series s ON sr.series_id = s.id
-      WHERE sr.bib_number = ${bibNumber} AND r.is_active = true
+      WHERE sr.bib_number = ${bibNumber} AND (r.is_active IS NULL OR r.is_active = true)
       ORDER BY s.year DESC, sr.created_at DESC
       LIMIT 1
     `;
@@ -170,16 +174,105 @@ export async function getRunnerByBibNumber(bibNumber: string, seriesId?: string)
 export async function getAllRaces(year?: number): Promise<DbRace[]> {
   const sql = getSql();
   if (year) {
+    // Return both scraped races and planned races for the specified year
     const result = await sql`
-      SELECT * FROM races 
-      WHERE year = ${year}
-      ORDER BY date DESC
+      -- Scraped races (from races table)
+      SELECT 
+        r.id,
+        r.series_id,
+        r.name,
+        r.date,
+        r.year,
+        r.distance_miles,
+        r.location,
+        r.course_type,
+        r.mcrrc_url,
+        r.results_scraped_at,
+        r.notes,
+        r.created_at,
+        r.updated_at,
+        'scraped' as race_status,
+        r.planned_race_id
+      FROM races r
+      WHERE r.year = ${year}
+      
+      UNION ALL
+      
+      -- Planned races (from planned_races table) that haven't been scraped yet
+      SELECT 
+        pr.id,
+        pr.series_id,
+        pr.name,
+        pr.planned_date as date,
+        pr.year,
+        pr.estimated_distance as distance_miles,
+        pr.location,
+        null as course_type,
+        null as mcrrc_url,
+        null as results_scraped_at,
+        pr.notes,
+        pr.created_at,
+        pr.updated_at,
+        pr.status as race_status,
+        null as planned_race_id
+      FROM planned_races pr
+      WHERE pr.year = ${year} 
+        AND pr.status = 'planned'
+        AND NOT EXISTS (
+          SELECT 1 FROM races r2 WHERE r2.planned_race_id = pr.id
+        )
+      
+      ORDER BY date ASC
     `;
     return result as DbRace[];
   } else {
+    // Return all races from all years
     const result = await sql`
-      SELECT * FROM races 
-      ORDER BY date DESC
+      -- Scraped races (from races table)
+      SELECT 
+        r.id,
+        r.series_id,
+        r.name,
+        r.date,
+        r.year,
+        r.distance_miles,
+        r.location,
+        r.course_type,
+        r.mcrrc_url,
+        r.results_scraped_at,
+        r.notes,
+        r.created_at,
+        r.updated_at,
+        'scraped' as race_status,
+        r.planned_race_id
+      FROM races r
+      
+      UNION ALL
+      
+      -- Planned races (from planned_races table) that haven't been scraped yet
+      SELECT 
+        pr.id,
+        pr.series_id,
+        pr.name,
+        pr.planned_date as date,
+        pr.year,
+        pr.estimated_distance as distance_miles,
+        pr.location,
+        null as course_type,
+        null as mcrrc_url,
+        null as results_scraped_at,
+        pr.notes,
+        pr.created_at,
+        pr.updated_at,
+        pr.status as race_status,
+        null as planned_race_id
+      FROM planned_races pr
+      WHERE pr.status = 'planned'
+        AND NOT EXISTS (
+          SELECT 1 FROM races r2 WHERE r2.planned_race_id = pr.id
+        )
+      
+      ORDER BY date ASC
     `;
     return result as DbRace[];
   }
@@ -200,6 +293,7 @@ export async function getRaceResults(raceId: string): Promise<any[]> {
   const result = await sql`
     SELECT 
       rr.*,
+      r.id as runner_id,
       r.first_name, 
       r.last_name, 
       r.gender, 
@@ -488,7 +582,7 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
     });
     
     // Assign age group ranks
-    for (const [key, ageGroupResults] of ageGroupRankings) {
+    for (const [key, ageGroupResults] of Array.from(ageGroupRankings.entries())) {
       ageGroupResults.forEach((result, index) => {
         const existing = raceRankingMap.get(result.series_registration_id) || { overallRank: 0, ageGroupRank: 0 };
         raceRankingMap.set(result.series_registration_id, {
