@@ -13,40 +13,57 @@
 import { calculateMCRRCStandings } from '../lib/db/utils.js';
 import { getSql } from '../lib/db/connection.js';
 
-// Default series ID - MCRRC Championship Series 2025
-const DEFAULT_SERIES_ID = 'f75a7257-ad21-495c-a127-69240dd0193d';
 const TARGET_YEAR = 2025;
+const SERIES_NAME = 'MCRRC Championship Series';
 
 async function calculateStandings(): Promise<void> {
   const startTime = Date.now();
   
   try {
     console.log('🏆 Initiating MCRRC Championship Series Standings Calculation...');
-    console.log(`📊 Series ID: ${DEFAULT_SERIES_ID}`);
+    console.log(`📊 Series: ${SERIES_NAME}`);
     console.log(`📅 Year: ${TARGET_YEAR}`);
     console.log('');
     
-    // Verify data exists before calculation
+    // Find the series by name and year
     const sql = getSql();
+    
+    console.log('📋 Finding series...');
+    const series = await sql`
+      SELECT id, name, year 
+      FROM series 
+      WHERE name = ${SERIES_NAME} AND year = ${TARGET_YEAR}
+    `;
+
+    if (series.length === 0) {
+      console.error(`❌ Series "${SERIES_NAME}" for year ${TARGET_YEAR} not found`);
+      console.error('   Make sure the series has been created first.');
+      console.error('   Run: npm run setup:complete');
+      process.exit(1);
+    }
+
+    const seriesId = series[0].id;
+    console.log(`✅ Found series: "${series[0].name}" (${series[0].year}) - ID: ${seriesId}`);
+    console.log('');
     
     console.log('🔍 Verifying data...');
     const raceResults = await sql`
       SELECT COUNT(*) as count
       FROM race_results rr
       JOIN series_registrations sr ON rr.series_registration_id = sr.id
-      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+      WHERE sr.series_id = ${seriesId}
     `;
     
     const races = await sql`
       SELECT COUNT(*) as count
       FROM races
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
     `;
     
     const plannedRaces = await sql`
       SELECT COUNT(*) as count
       FROM planned_races
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
     `;
     
     console.log(`   📊 Race results: ${raceResults[0].count}`);
@@ -63,7 +80,7 @@ async function calculateStandings(): Promise<void> {
     console.log('⏳ Starting calculation (this may take a while for large datasets)...');
     
     // Run the calculation
-    await calculateMCRRCStandings(DEFAULT_SERIES_ID, TARGET_YEAR);
+    await calculateMCRRCStandings(seriesId, TARGET_YEAR);
     
     const endTime = Date.now();
     const duration = endTime - startTime;
@@ -76,7 +93,7 @@ async function calculateStandings(): Promise<void> {
       SELECT COUNT(*) as count
       FROM series_standings ss
       JOIN series_registrations sr ON ss.series_registration_id = sr.id
-      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+      WHERE sr.series_id = ${seriesId}
     `;
     
     console.log(`   🏆 Total standings calculated: ${standings[0].count}`);
@@ -94,7 +111,7 @@ async function calculateStandings(): Promise<void> {
       FROM series_standings s
       JOIN series_registrations sr ON s.series_registration_id = sr.id
       JOIN runners r ON sr.runner_id = r.id
-      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+      WHERE sr.series_id = ${seriesId}
       ORDER BY r.gender, s.overall_points DESC
       LIMIT 10
     `;

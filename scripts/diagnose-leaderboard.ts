@@ -12,9 +12,8 @@
 
 import { getSql } from '../lib/db/connection';
 
-// Default series ID - MCRRC Championship Series 2025
-const DEFAULT_SERIES_ID = 'f75a7257-ad21-495c-a127-69240dd0193d';
 const TARGET_YEAR = 2025;
+const SERIES_NAME = 'MCRRC Championship Series';
 
 async function diagnoseLeaderboard(): Promise<void> {
   if (!process.env.DATABASE_URL) {
@@ -28,23 +27,26 @@ async function diagnoseLeaderboard(): Promise<void> {
   try {
     console.log('🔍 MCRRC Championship Series Leaderboard Diagnostics');
     console.log('=' .repeat(60));
-    console.log(`📊 Series ID: ${DEFAULT_SERIES_ID}`);
+    console.log(`📊 Series: ${SERIES_NAME}`);
     console.log(`📅 Year: ${TARGET_YEAR}`);
     console.log('');
 
-    // 1. Check series exists
+    // 1. Find series by name and year
     const series = await sql`
       SELECT id, name, year, is_active 
       FROM series 
-      WHERE id = ${DEFAULT_SERIES_ID}
+      WHERE name = ${SERIES_NAME} AND year = ${TARGET_YEAR}
     ` as any[];
 
     if (series.length === 0) {
       console.log('❌ Series not found!');
-      console.log(`   The series ID ${DEFAULT_SERIES_ID} doesn't exist.`);
+      console.log(`   The series "${SERIES_NAME}" for year ${TARGET_YEAR} doesn't exist.`);
       console.log('   You may need to run the seed script first.');
+      console.log('   Run: npm run setup:complete');
       return;
     }
+
+    const seriesId = series[0].id;
 
     console.log('✅ Series found:');
     console.log(`   Name: ${series[0].name}`);
@@ -52,11 +54,14 @@ async function diagnoseLeaderboard(): Promise<void> {
     console.log(`   Active: ${series[0].is_active}`);
     console.log('');
 
+    console.log(`   ID: ${seriesId}`);
+    console.log('');
+
     // 2. Check planned races
     const plannedRaces = await sql`
       SELECT name, status, series_order 
       FROM planned_races 
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
       ORDER BY series_order
     ` as any[];
 
@@ -80,7 +85,7 @@ async function diagnoseLeaderboard(): Promise<void> {
     const scrapedRaces = await sql`
       SELECT id, name, date, distance_miles, planned_race_id
       FROM races 
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
       ORDER BY date
     ` as any[];
 
@@ -102,7 +107,7 @@ async function diagnoseLeaderboard(): Promise<void> {
         COUNT(rr.id) as result_count
       FROM races r
       LEFT JOIN race_results rr ON r.id = rr.race_id
-      WHERE r.series_id = ${DEFAULT_SERIES_ID} AND r.year = ${TARGET_YEAR}
+      WHERE r.series_id = ${seriesId} AND r.year = ${TARGET_YEAR}
       GROUP BY r.id, r.name
       ORDER BY r.date
     ` as any[];
@@ -122,7 +127,7 @@ async function diagnoseLeaderboard(): Promise<void> {
     const registrationCount = await sql`
       SELECT COUNT(*) as count
       FROM series_registrations 
-      WHERE series_id = ${DEFAULT_SERIES_ID}
+      WHERE series_id = ${seriesId}
     ` as any[];
 
     console.log(`👥 Series Registrations: ${registrationCount[0]?.count || 0} runners`);
@@ -133,7 +138,7 @@ async function diagnoseLeaderboard(): Promise<void> {
       SELECT COUNT(*) as count
       FROM series_standings ss
       JOIN series_registrations sr ON ss.series_registration_id = sr.id
-      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+      WHERE sr.series_id = ${seriesId}
     ` as any[];
 
     const standingsRows = await sql`
@@ -148,7 +153,7 @@ async function diagnoseLeaderboard(): Promise<void> {
       FROM series_standings ss
       JOIN series_registrations sr ON ss.series_registration_id = sr.id
       JOIN runners r ON sr.runner_id = r.id
-      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+      WHERE sr.series_id = ${seriesId}
       ORDER BY ss.total_points DESC
       LIMIT 5
     ` as any[];
@@ -184,7 +189,7 @@ async function diagnoseLeaderboard(): Promise<void> {
       console.log('   SOLUTION: Calculate MCRRC Championship Series standings');
       console.log(`   COMMAND: curl -X POST http://localhost:3000/api/standings/calculate \\`);
       console.log(`            -H "Content-Type: application/json" \\`);
-      console.log(`            -d '{"seriesId": "${DEFAULT_SERIES_ID}", "year": ${TARGET_YEAR}}'`);
+      console.log(`            -d '{"seriesId": "${seriesId}", "year": ${TARGET_YEAR}}'`);
     } else {
       console.log('✅ Data looks good! Check frontend filtering logic.');
     }
