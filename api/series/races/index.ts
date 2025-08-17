@@ -24,56 +24,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      // Get all races in a series (both scraped and planned)
-      const { year = 2025, seriesId = 'f75a7257-ad21-495c-a127-69240dd0193d' } = req.query;
+      // Get all races in a series using planned_races as authoritative source
+      const { year = 2025, seriesName = 'MCRRC Championship Series' } = req.query;
 
-      // Get scraped races
-      const scrapedRaces = await sql`
-        SELECT 
-          r.id,
-          r.name,
-          r.date,
-          r.distance_miles as distance,
-          r.location,
-          r.mcrrc_url,
-          r.results_scraped_at,
-          'scraped' as status
-        FROM races r
-        WHERE r.series_id = ${seriesId} AND r.year = ${year}
-        ORDER BY r.date
+      // Find series by name and year
+      const series = await sql`
+        SELECT id 
+        FROM series 
+        WHERE name = ${seriesName} AND year = ${year}
       `;
 
-      // Get planned races (not yet scraped)
-      const plannedRaces = await sql`
+      if (series.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: `Series "${seriesName}" for year ${year} not found`
+        });
+      }
+
+      const seriesId = series[0].id;
+
+      // Get all planned races with their scraped status
+      const allRaces = await sql`
         SELECT 
           pr.id,
           pr.name,
           pr.planned_date as date,
           pr.estimated_distance as distance,
           pr.location,
-          null as mcrrc_url,
-          null as results_scraped_at,
-          'planned' as status
+          pr.series_order,
+          r.id as scraped_race_id,
+          r.mcrrc_url,
+          r.results_scraped_at,
+          r.distance_miles as actual_distance,
+          CASE 
+            WHEN r.id IS NOT NULL THEN 'scraped'
+            ELSE 'planned'
+          END as status
         FROM planned_races pr
+        LEFT JOIN races r ON pr.id = r.planned_race_id 
         WHERE pr.series_id = ${seriesId} AND pr.year = ${year}
-        ORDER BY pr.planned_date
+        ORDER BY pr.series_order, pr.planned_date
       `;
 
-      // Combine and sort by date
-      const allRaces = [...(scrapedRaces as any[]), ...(plannedRaces as any[])];
-      allRaces.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      // Count scraped vs planned
+      const scrapedCount = (allRaces as any[]).filter(race => race.status === 'scraped').length;
+      const totalCount = (allRaces as any[]).length;
 
       return res.status(200).json({
         success: true,
         data: allRaces,
-        totalRaces: allRaces.length,
-        scrapedRaces: (scrapedRaces as any[]).length,
-        plannedRaces: (plannedRaces as any[]).length
+        totalRaces: totalCount,
+        scrapedRaces: scrapedCount,
+        plannedRaces: totalCount - scrapedCount
       });
 
     } else if (req.method === 'POST') {
       // Add a new planned race
-      const { name, date, estimatedDistance, location, year = 2025, seriesId = 'f75a7257-ad21-495c-a127-69240dd0193d' } = req.body;
+      const { name, date, estimatedDistance, location, year = 2025, seriesName = 'MCRRC Championship Series' } = req.body;
+
+      // Find series by name and year
+      const series = await sql`
+        SELECT id 
+        FROM series 
+        WHERE name = ${seriesName} AND year = ${year}
+      `;
+
+      if (series.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: `Series "${seriesName}" for year ${year} not found`
+        });
+      }
+
+      const seriesId = series[0].id;
 
       if (!name || !date) {
         return res.status(400).json({

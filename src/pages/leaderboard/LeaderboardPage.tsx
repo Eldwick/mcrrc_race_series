@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Trophy, Medal, Filter, Search, Calendar, Loader2 } from 'lucide-react';
+import { Trophy, Filter, Search, Calendar, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Input, Select, Badge, Button } from '../../components/ui';
 import { formatPlace, formatRunnerName, getRunnerInitials, StyledPlace } from '../../utils';
@@ -31,6 +31,7 @@ export function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [raceProgress, setRaceProgress] = useState({ completed: 0, total: 0 });
   
   // MCRRC-specific filters
   const [filters, setFilters] = useState({
@@ -67,6 +68,31 @@ export function LeaderboardPage() {
     };
 
     fetchStandings();
+  }, [filters.year]);
+
+  // Fetch race progress (completed vs total races)
+  useEffect(() => {
+    const fetchRaceProgress = async () => {
+      try {
+        const response = await fetch(`/api/series/races?year=${filters.year}`);
+        if (!response.ok) {
+          console.warn('Failed to fetch race progress');
+          return;
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+          setRaceProgress({
+            completed: data.scrapedRaces || 0,
+            total: data.totalRaces || 0
+          });
+        }
+      } catch (err) {
+        console.warn('Error fetching race progress:', err);
+      }
+    };
+
+    fetchRaceProgress();
   }, [filters.year]);
 
   // Filter and sort standings based on MCRRC category and gender
@@ -124,11 +150,20 @@ export function LeaderboardPage() {
               {filters.gender === 'M' ? "Men's" : "Women's"} {" "}
               {filters.category === 'overall' ? 'Overall Category' : `${filters.category} Age Group`}
             </h2>
-            <p className="text-gray-600 text-sm mt-1">
-              {filters.year} standings • {filters.category === 'overall' 
-                ? 'Points from overall M/F placement' 
-                : 'Points from age group M/F placement'}
-            </p>
+            {raceProgress.total > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <Calendar className="w-3 h-3" />
+                  <span>{raceProgress.completed}/{raceProgress.total} races completed</span>
+                </div>
+                <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                  <div 
+                    className="bg-primary-600 h-1.5 rounded-full transition-all" 
+                    style={{ width: `${Math.min(100, (raceProgress.completed / raceProgress.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
         
@@ -249,44 +284,7 @@ export function LeaderboardPage() {
         </Card>
       )}
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {filteredStandings.length}
-              </h3>
-              <p className="text-sm text-gray-600">Total Runners</p>
-            </div>
-            <Trophy className="w-8 h-8 text-primary-600" />
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {standings.length > 0 ? Math.ceil(standings[0]?.racesParticipated || 1) : 1}
-              </h3>
-              <p className="text-sm text-gray-600">Series Races</p>
-            </div>
-            <Calendar className="w-8 h-8 text-primary-600" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {filteredStandings.reduce((total, standing) => total + standing.racesParticipated, 0)}
-              </h3>
-              <p className="text-sm text-gray-600">Total Participations</p>
-            </div>
-            <Medal className="w-8 h-8 text-primary-600" />
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Leaderboard */}
       <Card>
@@ -324,14 +322,12 @@ export function LeaderboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-2 font-medium text-gray-900">Rank</th>
+                    <th className="text-center py-3 px-2 font-medium text-gray-900">Rank</th>
                     <th className="text-left py-3 px-2 font-medium text-gray-900">Runner</th>
-                    <th className="text-center py-3 px-2 font-medium text-gray-900">Bib</th>
-                    <th className="text-center py-3 px-2 font-medium text-gray-900">Age Group</th>
-                    <th className="text-right py-3 px-2 font-medium text-gray-900">
-                      {filters.category === 'overall' ? 'Overall Points' : 'Age Group Points'}
+                    <th className="text-center py-3 px-2 font-medium text-gray-900">
+                      Points
                     </th>
-                    <th className="text-right py-3 px-2 font-medium text-gray-900">Races</th>
+                    <th className="text-center py-3 px-2 font-medium text-gray-900">Races</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -346,7 +342,7 @@ export function LeaderboardPage() {
                     
                     return (
                       <tr key={standing.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-4 px-2">
+                        <td className="py-4 px-2 text-center">
                           <StyledPlace place={finalRank} formatPlace={formatPlace} />
                         </td>
                         
@@ -364,35 +360,22 @@ export function LeaderboardPage() {
                               <p className="font-medium text-gray-900">
                                 {formatRunnerName(runner.firstName, runner.lastName)}
                               </p>
-                              <p className="text-sm text-gray-500">
-                                Bib #{runner.bibNumber}
-                              </p>
+                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <Badge variant="secondary" size="sm" className="text-xs">
+                                  {runner.ageGroup}
+                                </Badge>
+                              </div>
                             </div>
                           </Link>
                         </td>
                         
                         <td className="py-4 px-2 text-center">
-                          <Badge variant="outline" size="sm">
-                            #{runner.bibNumber}
-                          </Badge>
-                        </td>
-                        
-                        <td className="py-4 px-2 text-center">
-                          <Badge variant="secondary" size="sm">
-                            {runner.ageGroup}
-                          </Badge>
-                        </td>
-                        
-                        <td className="py-4 px-2 text-right">
                           <div className="text-lg font-semibold text-gray-900">
                             {filters.category === 'overall' ? standing.overallPoints : standing.ageGroupPoints}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            {filters.category === 'overall' ? 'Overall Points' : 'Age Group Points'}
-                          </div>
                         </td>
                         
-                        <td className="py-4 px-2 text-right">
+                        <td className="py-4 px-2 text-center">
                           <span className="text-sm text-gray-600">
                             {standing.racesParticipated}
                           </span>

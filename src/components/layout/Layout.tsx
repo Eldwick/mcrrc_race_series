@@ -22,16 +22,16 @@ const navigation: NavItem[] = [
     description: 'Series standings and rankings'
   },
   {
-    name: 'Runners',
-    href: '/runners',
-    icon: Users,
-    description: 'Individual runner profiles'
-  },
-  {
     name: 'Races',
     href: '/races',
     icon: Calendar,
     description: 'Race results and schedules'
+  },
+  {
+    name: 'Runners',
+    href: '/runners',
+    icon: Users,
+    description: 'Individual runner profiles'
   }
   // Admin page removed from navigation - accessible only via direct URL (/admin)
 ];
