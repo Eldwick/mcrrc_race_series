@@ -30,7 +30,9 @@
     "test:race-counting": "NODE_NO_WARNINGS=1 tsx scripts/test-race-counting.ts",
     "debug:runner": "tsx scripts/debug-runner.ts",
     "debug:race-results": "tsx scripts/debug-race-results.ts",
-    "test-scraper": "tsx lib/scraping/test-scraper.ts"
+    "test-scraper": "tsx lib/scraping/test-scraper.ts",
+    "scrape:historical": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-championship-races.ts",
+    "test:historical:recent": "NODE_NO_WARNINGS=1 tsx scripts/test-historical-scraping-2023-2024.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
@@ -40,6 +42,7 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "lucide-react": "^0.539.0",
     "node-html-parser": "^7.0.1",

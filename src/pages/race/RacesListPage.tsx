@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Trophy, Clock, Loader2, ExternalLink } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
-import { Card, CardContent, Badge } from '../../components/ui';
+import { Card, CardContent, Badge, Select } from '../../components/ui';
 import { formatDate, formatRunnerName, getRunnerInitials } from '../../utils';
 import { api } from '../../services/api';
 
@@ -36,7 +36,8 @@ interface RaceWithSummary {
 }
 
 export function RacesListPage() {
-  const { state } = useData();
+  const { state, selectYear } = useData();
+  const { availableYears } = state;
   const [races, setRaces] = useState<RaceWithSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,11 +111,32 @@ export function RacesListPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Races</h1>
-        <p className="text-gray-600 mt-1">
-          {state.selectedYear} Championship Series races
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Races</h1>
+          <p className="text-gray-600 mt-1">
+            {state.selectedYear} Championship Series races
+          </p>
+        </div>
+        
+        {/* Year Selector */}
+        <div className="flex items-center gap-2">
+          <label htmlFor="year-select" className="text-sm font-medium text-gray-700">
+            Year:
+          </label>
+          <Select
+            id="year-select"
+            value={state.selectedYear.toString()}
+            onChange={(e) => selectYear(parseInt(e.target.value))}
+            className="min-w-[100px]"
+          >
+            {availableYears.map(year => (
+              <option key={year} value={year.toString()}>
+                {year}
+              </option>
+            ))}
+          </Select>
+        </div>
       </div>
 
       {/* Race Summary Stats */}
