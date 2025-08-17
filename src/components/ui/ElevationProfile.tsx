@@ -4,17 +4,16 @@ import { formatElevation } from '../../utils/gpx';
 
 interface ElevationProfileProps {
   elevationData: ElevationProfile;
-  width?: number;
-  height?: number;
   className?: string;
 }
 
 export function ElevationProfile({ 
   elevationData, 
-  width = 600, 
-  height = 200, 
   className = '' 
 }: ElevationProfileProps) {
+  // Use fixed viewBox dimensions for consistent calculations
+  const viewBoxWidth = 800;
+  const viewBoxHeight = 300;
   
   const chartData = useMemo(() => {
     const { points, minElevation, maxElevation } = elevationData;
@@ -36,8 +35,8 @@ export function ElevationProfile({
 
     return sampledPoints.map((point, index) => {
       const progress = (point.distance || 0) / totalDistance;
-      const x = progress * width;
-      const y = height - ((point.elevation - minElevation + padding) / (elevationRange + 2 * padding)) * height;
+      const x = progress * viewBoxWidth;
+      const y = viewBoxHeight - ((point.elevation - minElevation + padding) / (elevationRange + 2 * padding)) * viewBoxHeight;
       
       return {
         x,
@@ -47,7 +46,7 @@ export function ElevationProfile({
         originalIndex: index * sampleRate
       };
     });
-  }, [elevationData, width, height]);
+  }, [elevationData, viewBoxWidth, viewBoxHeight]);
 
   // Calculate mile marker positions for the chart
   const mileMarkerPositions = useMemo(() => {
@@ -60,8 +59,8 @@ export function ElevationProfile({
 
     return mileMarkers.map(marker => {
       const progress = (marker.position.distance || 0) / totalDistance;
-      const x = progress * width;
-      const y = height - ((marker.position.elevation - minElevation + padding) / (elevationRange + 2 * padding)) * height;
+      const x = progress * viewBoxWidth;
+      const y = viewBoxHeight - ((marker.position.elevation - minElevation + padding) / (elevationRange + 2 * padding)) * viewBoxHeight;
       
       return {
         mile: marker.mile,
@@ -70,7 +69,7 @@ export function ElevationProfile({
         elevation: marker.position.elevation
       };
     });
-  }, [elevationData, width, height]);
+  }, [elevationData, viewBoxWidth, viewBoxHeight]);
 
   // Create SVG path for the elevation profile
   const pathData = useMemo(() => {
@@ -89,17 +88,17 @@ export function ElevationProfile({
   const areaPath = useMemo(() => {
     if (chartData.length < 2) return '';
     
-    let path = `M ${chartData[0].x} ${height}`;
+    let path = `M ${chartData[0].x} ${viewBoxHeight}`;
     path += ` L ${chartData[0].x} ${chartData[0].y}`;
     
     for (let i = 1; i < chartData.length; i++) {
       path += ` L ${chartData[i].x} ${chartData[i].y}`;
     }
     
-    path += ` L ${chartData[chartData.length - 1].x} ${height} Z`;
+    path += ` L ${chartData[chartData.length - 1].x} ${viewBoxHeight} Z`;
     
     return path;
-  }, [chartData, height]);
+  }, [chartData, viewBoxHeight]);
 
   if (chartData.length === 0) {
     return (
@@ -144,12 +143,11 @@ export function ElevationProfile({
           </div>
         </div>
         
-        <div className="relative overflow-x-auto">
+        <div className="relative">
           <svg 
-            width={width} 
-            height={height} 
-            className="border rounded"
-            style={{ minWidth: '300px' }}
+            viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+            className="w-full h-auto border rounded"
+            style={{ minHeight: '200px', maxHeight: '400px' }}
           >
             {/* Grid lines */}
             <defs>
@@ -184,7 +182,7 @@ export function ElevationProfile({
                   x1={marker.x}
                   y1={0}
                   x2={marker.x}
-                  y2={height}
+                  y2={viewBoxHeight}
                   stroke="#f59e0b"
                   strokeWidth="2"
                   strokeDasharray="5,5"
@@ -232,13 +230,6 @@ export function ElevationProfile({
               </circle>
             ))}
           </svg>
-          
-          {/* Y-axis labels */}
-          <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 -ml-12">
-            <span>{formatElevation(elevationData.maxElevation)}</span>
-            <span>{formatElevation((elevationData.maxElevation + elevationData.minElevation) / 2)}</span>
-            <span>{formatElevation(elevationData.minElevation)}</span>
-          </div>
         </div>
         
         <div className="mt-2 text-xs text-gray-500 text-center">

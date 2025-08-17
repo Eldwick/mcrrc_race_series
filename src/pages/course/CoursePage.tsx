@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import { 
   Calendar, 
   MapPin, 
- 
   Users, 
   Clock, 
   Loader2, 
@@ -11,7 +10,9 @@ import {
   TrendingUp,
   ExternalLink,
   Target,
-  Mountain
+  Mountain,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Select, CourseMap, ElevationProfile } from '../../components/ui';
 import { formatDate, formatRunnerName, formatTime } from '../../utils';
@@ -35,13 +36,26 @@ export function CoursePage() {
   const [gpxData, setGpxData] = useState<GPXData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'records' | 'history' | 'map'>('overview');
+  const [accordionState, setAccordionState] = useState({
+    map: false,
+    records: false,
+    history: false,
+    participations: false
+  });
   
   // Filter state for course records
   const [recordFilters, setRecordFilters] = useState({
     gender: 'all' as 'all' | 'M' | 'F',
     ageGroup: 'overall' as string
   });
+
+  // Accordion toggle function
+  const toggleAccordion = (section: 'map' | 'records' | 'history' | 'participations') => {
+    setAccordionState(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   useEffect(() => {
     const fetchCourseData = async () => {
@@ -276,78 +290,310 @@ export function CoursePage() {
         </Card>
       )}
 
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-8">
-          {['overview', 'records', 'history', ...(gpxData ? ['map'] : [])].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab
-                  ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab === 'map' ? (
-                <>
-                  <Mountain className="w-4 h-4 inline mr-2" />
-                  Course Map
-                </>
-              ) : (
-                tab.charAt(0).toUpperCase() + tab.slice(1)
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
 
-      {/* Tab Content */}
-      {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Races */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Races</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {course.races.slice(0, 5).map((race) => (
-                  <Link 
-                    key={race.id} 
-                    to={`/race/${race.id}`}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                  >
-                    <div>
-                      <div className="font-medium">{race.name}</div>
-                      <div className="text-sm text-gray-600">
-                        {formatDate(race.date)} • {race.participantCount} participants
+
+      {/* Accordion Sections */}
+      
+      {/* Course Map Accordion */}
+      {gpxData && (
+        <Card>
+          <CardHeader 
+            className="cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => toggleAccordion('map')}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Mountain className="w-5 h-5 text-green-500" />
+                Course Map & Elevation
+              </CardTitle>
+              {accordionState.map ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
+            </div>
+          </CardHeader>
+          {accordionState.map && (
+            <CardContent className="pt-0">
+              <div className="space-y-6">
+                {/* Course Map */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <MapPin className="w-5 h-5" />
+                    Course Map
+                  </h3>
+                  <CourseMap 
+                    gpxData={gpxData} 
+                    height="500px"
+                    className="mb-4"
+                  />
+                  <div className="text-sm text-gray-600">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                        <span>Start</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-red-500 rounded-full border-2 border-white"></div>
+                        <span>Finish</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-1 bg-red-500"></div>
+                        <span>Course Route</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium">{race.year}</div>
+                  </div>
+                </div>
+
+                {/* Elevation Profile */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Mountain className="w-5 h-5" />
+                    Elevation Profile
+                  </h3>
+                  <ElevationProfile 
+                    elevationData={gpxData.elevationProfile}
+                  />
+                </div>
+
+
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* Course Records Accordion */}
+      {records && (
+        <Card>
+          <CardHeader 
+            className="cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => toggleAccordion('records')}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-yellow-500" />
+                Course Records
+              </CardTitle>
+              {accordionState.records ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
+            </div>
+          </CardHeader>
+          {accordionState.records && (
+            <CardContent className="pt-0">
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  {/* Filter Controls */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Gender Filter */}
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                      <Button
+                        variant={recordFilters.gender === 'all' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => handleRecordGenderChange('all')}
+                        className="rounded-none border-r flex-1"
+                      >
+                        Overall
+                      </Button>
+                      <Button
+                        variant={recordFilters.gender === 'M' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => handleRecordGenderChange('M')}
+                        className="rounded-none border-r flex-1"
+                      >
+                        Men
+                      </Button>
+                      <Button
+                        variant={recordFilters.gender === 'F' ? 'primary' : 'ghost'}
+                        size="sm"
+                        onClick={() => handleRecordGenderChange('F')}
+                        className="rounded-none flex-1"
+                      >
+                        Women
+                      </Button>
+                    </div>
+
+                    {/* Age Group Filter */}
+                    <Select
+                      value={recordFilters.ageGroup}
+                      onChange={(e) => handleRecordAgeGroupChange(e.target.value)}
+                      className="min-w-32"
+                    >
+                      <option value="overall">All Ages</option>
+                      {availableAgeGroups.map(ageGroup => (
+                        <option key={ageGroup} value={ageGroup}>
+                          {ageGroup}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2">Rank</th>
+                        <th className="text-left py-2">Runner</th>
+                        <th className="text-left py-2">Time</th>
+                        <th className="text-left py-2">Year</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredCourseRecords.map((record, index) => (
+                        <tr key={index} className="border-b hover:bg-gray-50">
+                          <td className="py-3">{record.rankings.overallRank}</td>
+                          <td className="py-3">
+                            <div>
+                              <div className="font-medium">
+                                {formatRunnerName(record.runner.firstName, record.runner.lastName)}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="outline" size="sm">
+                                  {record.runner.gender}
+                                </Badge>
+                                <Badge variant="outline" size="sm">
+                                  Age {record.runner.age}
+                                </Badge>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3">
+                            <div>
+                              <span className="font-mono font-medium text-gray-900">
+                                {formatTime(record.results.gunTime)}
+                              </span>
+                              {record.recordType && (
+                                <div className="mt-1">
+                                  <Badge variant="success" size="sm">{record.recordType}</Badge>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3">{record.year}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {filteredCourseRecords.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No records found for the selected filters.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* Race History Accordion */}
+      <Card>
+        <CardHeader 
+          className="cursor-pointer hover:bg-gray-50 transition-colors"
+          onClick={() => toggleAccordion('history')}
+        >
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-blue-500" />
+              Race History
+            </CardTitle>
+            {accordionState.history ? (
+              <ChevronUp className="w-5 h-5 text-gray-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            )}
+          </div>
+        </CardHeader>
+        {accordionState.history && (
+          <CardContent className="pt-0">
+            <div className="space-y-4">
+              {course.races.map((race) => (
+                <Link 
+                  key={race.id} 
+                  to={`/race/${race.id}`}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer block"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold">{race.name}</h3>
+                      <Badge variant="outline" size="sm">{race.year}</Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(race.date)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        {race.participantCount} participants
+                      </div>
+                      {race.distanceMiles && (
+                        <div className="flex items-center gap-1">
+                          <Target className="w-4 h-4" />
+                          {race.distanceMiles} miles
+                        </div>
+                      )}
                       {race.fastestTime && (
-                        <div className="text-xs text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
                           Fastest: {formatTime(race.fastestTime)}
                         </div>
                       )}
                     </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  </div>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-primary-600 text-sm font-medium">
+                      View Results
+                    </span>
+                    {race.mcrrcUrl && (
+                      <a
+                        href={race.mcrrcUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gray-400 hover:text-gray-600"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        )}
+      </Card>
 
-          {/* Top Personal Records */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Multiple-Time Participants</CardTitle>
-            </CardHeader>
-            <CardContent>
+      {/* Most Participations Accordion */}
+      {records && (
+        <Card>
+          <CardHeader 
+            className="cursor-pointer hover:bg-gray-50 transition-colors"
+            onClick={() => toggleAccordion('participations')}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-purple-500" />
+                Most Participations
+              </CardTitle>
+              {accordionState.participations ? (
+                <ChevronUp className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              )}
+            </div>
+          </CardHeader>
+          {accordionState.participations && (
+            <CardContent className="pt-0">
               <div className="space-y-4">
-                {records?.personalRecords
+                {records.personalRecords
                   .sort((a, b) => b.statistics.timesRun - a.statistics.timesRun)
-                  .slice(0, 5)
+                  .slice(0, 10)
                   .map((pr, index) => (
                   <div key={`${pr.runner.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
@@ -373,280 +619,8 @@ export function CoursePage() {
                 ))}
               </div>
             </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'records' && records && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle>All Course Records</CardTitle>
-                
-                {/* Filter Controls */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {/* Gender Filter */}
-                  <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                    <Button
-                      variant={recordFilters.gender === 'all' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleRecordGenderChange('all')}
-                      className="rounded-none border-r flex-1"
-                    >
-                      Overall
-                    </Button>
-                    <Button
-                      variant={recordFilters.gender === 'M' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleRecordGenderChange('M')}
-                      className="rounded-none border-r flex-1"
-                    >
-                      Men
-                    </Button>
-                    <Button
-                      variant={recordFilters.gender === 'F' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleRecordGenderChange('F')}
-                      className="rounded-none flex-1"
-                    >
-                      Women
-                    </Button>
-                  </div>
-
-                  {/* Age Group Filter */}
-                  <Select
-                    value={recordFilters.ageGroup}
-                    onChange={(e) => handleRecordAgeGroupChange(e.target.value)}
-                    className="min-w-32"
-                  >
-                    <option value="overall">All Ages</option>
-                    {availableAgeGroups.map(ageGroup => (
-                      <option key={ageGroup} value={ageGroup}>
-                        {ageGroup}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">Rank</th>
-                      <th className="text-left py-2">Runner</th>
-                      <th className="text-left py-2">Time</th>
-                      <th className="text-left py-2">Year</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCourseRecords.map((record, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="py-3">{record.rankings.overallRank}</td>
-                        <td className="py-3">
-                          <div>
-                            <div className="font-medium">
-                              {formatRunnerName(record.runner.firstName, record.runner.lastName)}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" size="sm">
-                                {record.runner.gender}
-                              </Badge>
-                              <Badge variant="outline" size="sm">
-                                Age {record.runner.age}
-                              </Badge>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          <div>
-                            <span className="font-mono font-medium text-gray-900">
-                              {formatTime(record.results.gunTime)}
-                            </span>
-                            {record.recordType && (
-                              <div className="mt-1">
-                                <Badge variant="success" size="sm">{record.recordType}</Badge>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-3">{record.year}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                
-                {filteredCourseRecords.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    No records found for the selected filters.
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === 'history' && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Race History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {course.races.map((race) => (
-                  <Link 
-                    key={race.id} 
-                    to={`/race/${race.id}`}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:shadow-sm transition-shadow cursor-pointer block"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold">{race.name}</h3>
-                        <Badge variant="outline" size="sm">{race.year}</Badge>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {formatDate(race.date)}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4" />
-                          {race.participantCount} participants
-                        </div>
-                        {race.distanceMiles && (
-                          <div className="flex items-center gap-1">
-                            <Target className="w-4 h-4" />
-                            {race.distanceMiles} miles
-                          </div>
-                        )}
-                        {race.fastestTime && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            Fastest: {formatTime(race.fastestTime)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <span className="text-primary-600 text-sm font-medium">
-                        View Results
-                      </span>
-                      {race.mcrrcUrl && (
-                        <a
-                          href={race.mcrrcUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-gray-400 hover:text-gray-600"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      )}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Map Tab */}
-      {activeTab === 'map' && gpxData && (
-        <div className="space-y-6">
-          {/* Course Map */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
-                Course Map
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CourseMap 
-                gpxData={gpxData} 
-                height="500px"
-                className="mb-4"
-              />
-              <div className="text-sm text-gray-600">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-                    <span>Start</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-red-500 rounded-full border-2 border-white"></div>
-                    <span>Finish</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-1 bg-red-500"></div>
-                    <span>Course Route</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Elevation Profile */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mountain className="w-5 h-5" />
-                Elevation Profile
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ElevationProfile 
-                elevationData={gpxData.elevationProfile}
-                width={700}
-                height={250}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Course Statistics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600 mb-1">
-                  {Math.round(gpxData.elevationProfile.totalGain * 3.28084)} ft
-                </div>
-                <div className="text-sm text-gray-600">Total Elevation Gain</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-red-600 mb-1">
-                  {Math.round(gpxData.elevationProfile.totalLoss * 3.28084)} ft
-                </div>
-                <div className="text-sm text-gray-600">Total Elevation Loss</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600 mb-1">
-                  {Math.round(gpxData.elevationProfile.minElevation * 3.28084)} ft
-                </div>
-                <div className="text-sm text-gray-600">Lowest Point</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600 mb-1">
-                  {Math.round(gpxData.elevationProfile.maxElevation * 3.28084)} ft
-                </div>
-                <div className="text-sm text-gray-600">Highest Point</div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+          )}
+        </Card>
       )}
     </div>
   );

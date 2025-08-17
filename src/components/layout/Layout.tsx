@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Trophy, Users, Calendar, MapPin } from 'lucide-react';
 import { cn } from '../../utils';
@@ -44,6 +44,7 @@ const navigation: NavItem[] = [
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -59,7 +60,7 @@ export function Layout({ children }: LayoutProps) {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-gray-900">
-                    MCRRC Race Series
+                    MCRRC Races
                   </h1>
                   <p className="text-xs text-gray-500">
                     Championship Series Standings
@@ -97,9 +98,10 @@ export function Layout({ children }: LayoutProps) {
             <div className="md:hidden">
               <button
                 type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="text-gray-400 hover:text-gray-500 p-2"
               >
-                <span className="sr-only">Open main menu</span>
+                <span className="sr-only">Toggle main menu</span>
                 <svg
                   className="w-6 h-6"
                   fill="none"
@@ -110,7 +112,7 @@ export function Layout({ children }: LayoutProps) {
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+                    d={mobileMenuOpen ? "M6 18L18 6M6 6l12 12" : "M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"}
                   />
                 </svg>
               </button>
@@ -120,33 +122,41 @@ export function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Mobile Navigation */}
-      <div className="md:hidden bg-white border-b border-gray-200">
-        <div className="container py-2">
-          <nav className="flex flex-wrap gap-2">
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href || 
-                (item.href !== '/' && location.pathname.startsWith(item.href));
-              
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={cn(
-                    'flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary-50 text-primary-700 border border-primary-200'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white border-b border-gray-200 shadow-md">
+          <div className="container py-3">
+            <nav className="flex flex-col gap-1">
+              {navigation.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.href || 
+                  (item.href !== '/' && location.pathname.startsWith(item.href));
+                
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={cn(
+                      'flex items-center justify-between px-4 py-3 rounded-md text-base font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary-50 text-primary-700 border border-primary-200'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    )}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Icon className="w-5 h-5" />
+                      <div>
+                        <div>{item.name}</div>
+                        <div className="text-xs text-gray-500">{item.description}</div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
       <main className="container py-8">
