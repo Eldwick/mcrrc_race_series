@@ -137,6 +137,12 @@ export const api = {
     }));
   },
 
+  // Get available years (for year selector)
+  async getAvailableYears(): Promise<number[]> {
+    const response = await apiCall<{ data: number[]; count: number }>('/races/years');
+    return response.data;
+  },
+
   // Get races by year (optional)
   async getRaces(year?: number): Promise<any[]> {
     const endpoint = year ? `/races?year=${year}` : '/races';

@@ -26,7 +26,8 @@ interface MCRRCStanding {
 }
 
 export function LeaderboardPage() {
-  const { availableYears, availableAgeGroups } = useData();
+  const { state, availableAgeGroups } = useData();
+  const { availableYears } = state;
   const [standings, setStandings] = useState<MCRRCStanding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

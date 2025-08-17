@@ -159,12 +159,22 @@ export class MCRRCScraper {
   }
 
   /**
-   * Extract results from the race results table
+   * Extract results from the race results table or plain text format
    */
   private extractResults($: cheerio.CheerioAPI): { results: ScrapedRaceResult[], runners: ScrapedRunner[] } {
     const results: ScrapedRaceResult[] = [];
     const runners: ScrapedRunner[] = [];
     const runnerMap = new Map<string, ScrapedRunner>();
+
+    // First, check if this is a plain text format (legacy MCRRC format)
+    const bodyText = $('body').text();
+    if (this.isPlainTextResults(bodyText)) {
+      console.log('Detected plain text results format - parsing as fixed-width text');
+      return this.extractPlainTextResults(bodyText);
+    }
+
+    // Otherwise, parse as HTML table format
+    console.log('Detected HTML table format - parsing as structured table');
 
     // Find the results table - try different selectors
     let table = $('table').first();
@@ -212,6 +222,242 @@ export class MCRRCScraper {
 
     return { results, runners };
   }
+
+  /**
+   * Detect if the page contains plain text results format (legacy MCRRC format)
+   */
+  private isPlainTextResults(bodyText: string): boolean {
+    // Look for characteristic patterns of the plain text format
+    const hasHeaderPattern = bodyText.includes('Place Sex/Tot') || 
+                           (bodyText.includes('Place') && bodyText.includes('Sex/Tot') && bodyText.includes('Name')) ||
+                           bodyText.includes('Place Sex/Tot  Div/Tot  Num   Name');
+    
+    const hasSeparatorLine = bodyText.includes('=====');
+    
+    // Look for lines that match the result pattern: number, ratio, ratio, number, names, gender, age, etc.
+    const lines = bodyText.split('\n');
+    const hasResultPattern = lines.some(line => {
+      // Match lines like: "1   1/265    1/26     701 Karl Dusen            M 28"
+      return /^\s*\d+\s+\d+\/\d+\s+\d+\/\d+\s+\d+\s+[A-Za-z]/.test(line.trim());
+    });
+    
+    console.log('Plain text detection:', {
+      hasHeaderPattern,
+      hasSeparatorLine,
+      hasResultPattern,
+      detected: hasHeaderPattern && hasSeparatorLine && hasResultPattern
+    });
+    
+    return hasHeaderPattern && hasSeparatorLine && hasResultPattern;
+  }
+
+  /**
+   * Extract results from plain text format (legacy MCRRC format)
+   * Format: Place Sex/Tot Div/Tot Num Name S Ag Hometown Club Net_Time Pace Gun_Time Pace
+   */
+  private extractPlainTextResults(bodyText: string): { results: ScrapedRaceResult[], runners: ScrapedRunner[] } {
+    const results: ScrapedRaceResult[] = [];
+    const runners: ScrapedRunner[] = [];
+    const runnerMap = new Map<string, ScrapedRunner>();
+
+    try {
+      const lines = bodyText.split('\n');
+      
+      // Find the header line to understand column positions
+      const headerLineIndex = lines.findIndex(line => 
+        line.includes('Place') && line.includes('Sex/Tot') && line.includes('Name')
+      );
+      
+      if (headerLineIndex === -1) {
+        console.warn('Could not find header line in plain text results');
+        return { results, runners };
+      }
+
+      const headerLine = lines[headerLineIndex];
+      console.log('Header line found:', headerLine);
+
+      // Find separator line (with ====)
+      const separatorLineIndex = lines.findIndex((line, index) => 
+        index > headerLineIndex && line.includes('=====')
+      );
+
+      if (separatorLineIndex === -1) {
+        console.warn('Could not find separator line in plain text results');
+        return { results, runners };
+      }
+
+      // Process result lines (after separator, before any footer content)
+      let resultCount = 0;
+      for (let i = separatorLineIndex + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Skip empty lines
+        if (!line) continue;
+        
+        // Stop at footer content (Stay Informed, Email:, etc.)
+        if (line.includes('Stay Informed') || line.includes('Email:') || 
+            line.includes('Copyright') || line.includes('Terms & Conditions')) {
+          break;
+        }
+
+        // Skip lines that don't start with a number (place)
+        if (!/^\d+/.test(line)) continue;
+
+        try {
+          const parsed = this.parsePlainTextResultLine(line);
+          if (parsed.result && parsed.runner) {
+            results.push(parsed.result);
+            
+            // Only add unique runners
+            if (!runnerMap.has(parsed.runner.bibNumber)) {
+              runnerMap.set(parsed.runner.bibNumber, parsed.runner);
+              runners.push(parsed.runner);
+            }
+            resultCount++;
+          }
+        } catch (error) {
+          console.warn(`Error parsing plain text line ${i}: "${line}"`, error);
+        }
+      }
+
+      console.log(`Parsed ${resultCount} results from plain text format`);
+      return { results, runners };
+
+    } catch (error) {
+      console.error('Error parsing plain text results:', error);
+      return { results, runners };
+    }
+  }
+
+  /**
+   * Parse a single line of plain text results
+   * Format: Place Sex/Tot Div/Tot Num Name S Ag Hometown Club Net_Time Pace Gun_Time Pace
+   */
+  private parsePlainTextResultLine(line: string): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+    try {
+      // Use regex to parse the fixed-width format
+      // This regex attempts to capture the main fields from the fixed-width format
+      const regex = /^\s*(\d+)\s+(\d+\/\d+)\s+(\d+\/\d+)\s+(\d+)\s+(.+?)\s+([MF])\s+(\d+)\s+(.+?)\s+(\w*)\s+([\d:]+)\s+([\d:]+)\s+([\d:]+)\s+([\d:]+).*$/;
+      const match = line.match(regex);
+      
+      if (!match) {
+        // Try alternative parsing for lines that might have missing club or other variations
+        return this.parsePlainTextResultLineAlternative(line);
+      }
+
+      const [, place, sexTot, divTot, bib, name, gender, age, hometown, club, netTime, netPace, gunTime, gunPace] = match;
+
+      // Extract gender place from "1/265" format
+      const genderPlaceMatch = sexTot.match(/(\d+)\/\d+/);
+      const genderPlace = genderPlaceMatch ? parseInt(genderPlaceMatch[1]) : parseInt(place);
+
+      // Extract age group place from "1/26" format  
+      const ageGroupPlaceMatch = divTot.match(/(\d+)\/\d+/);
+      const ageGroupPlace = ageGroupPlaceMatch ? parseInt(ageGroupPlaceMatch[1]) : parseInt(place);
+
+      // Parse name into first and last
+      const nameParts = name.trim().split(' ');
+      const firstName = nameParts.shift() || '';
+      const lastName = nameParts.join(' ') || '';
+
+      const result: ScrapedRaceResult = {
+        bibNumber: bib.trim(),
+        place: parseInt(place),
+        placeGender: genderPlace,
+        placeAgeGroup: ageGroupPlace,
+        gunTime: this.normalizeTime(gunTime),
+        chipTime: this.normalizeTime(netTime),
+        pacePerMile: gunPace || netPace || '',
+        isDNF: false,
+        isDQ: false
+      };
+
+      const runner: ScrapedRunner = {
+        bibNumber: bib.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        gender: (gender.trim() === 'M' ? 'M' : 'F') as 'M' | 'F',
+        age: parseInt(age) || 25,
+        club: club.trim() || undefined
+      };
+
+      return { result, runner };
+
+    } catch (error) {
+      console.warn('Error parsing plain text result line:', error);
+      return { result: null, runner: null };
+    }
+  }
+
+  /**
+   * Alternative parsing for plain text lines that don't match the main regex
+   */
+  private parsePlainTextResultLineAlternative(line: string): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+    try {
+      // Split by whitespace and try to extract fields positionally
+      const parts = line.trim().split(/\s+/);
+      
+      if (parts.length < 8) {
+        return { result: null, runner: null };
+      }
+
+      const place = parseInt(parts[0]);
+      const bib = parts[3];
+      
+      // Find the gender field (should be M or F)
+      let genderIndex = -1;
+      for (let i = 4; i < parts.length; i++) {
+        if (parts[i] === 'M' || parts[i] === 'F') {
+          genderIndex = i;
+          break;
+        }
+      }
+
+      if (genderIndex === -1) {
+        return { result: null, runner: null };
+      }
+
+      const gender = parts[genderIndex] as 'M' | 'F';
+      const age = parseInt(parts[genderIndex + 1]) || 25;
+      
+      // Name is between bib and gender
+      const nameParts = parts.slice(4, genderIndex);
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Find time patterns (HH:MM:SS or MM:SS)
+      const timePattern = /^\d{1,2}:\d{2}(:\d{2})?$/;
+      const times = parts.filter(part => timePattern.test(part));
+      const gunTime = times.length > 0 ? times[times.length - 1] : '00:00:00'; // Take last time as gun time
+
+      const result: ScrapedRaceResult = {
+        bibNumber: bib,
+        place: place,
+        placeGender: place, // Fallback to overall place
+        placeAgeGroup: place, // Fallback to overall place
+        gunTime: this.normalizeTime(gunTime),
+        chipTime: this.normalizeTime(times[0] || gunTime),
+        pacePerMile: '', // Will be calculated later if needed
+        isDNF: false,
+        isDQ: false
+      };
+
+      const runner: ScrapedRunner = {
+        bibNumber: bib,
+        firstName: firstName,
+        lastName: lastName,
+        gender: gender,
+        age: age
+      };
+
+      return { result, runner };
+
+    } catch (error) {
+      return { result: null, runner: null };
+    }
+  }
+
+
 
   /**
    * Map column headers to expected fields

@@ -18,6 +18,7 @@ interface DataState {
   results: RaceResult[];
   standings: SeriesStanding[];
   series: Series[];
+  availableYears: number[];
   
   // UI State
   filters: FilterOptions;
@@ -39,6 +40,7 @@ type DataAction =
   | { type: 'SET_RESULTS'; payload: RaceResult[] }
   | { type: 'SET_STANDINGS'; payload: SeriesStanding[] }
   | { type: 'SET_SERIES'; payload: Series[] }
+  | { type: 'SET_AVAILABLE_YEARS'; payload: number[] }
   | { type: 'SET_FILTERS'; payload: Partial<FilterOptions> }
   | { type: 'SET_SORT'; payload: SortOptions }
   | { type: 'SET_SELECTED_SERIES'; payload: string | null }
@@ -58,6 +60,7 @@ const initialState: DataState = {
   results: [],
   standings: [],
   series: [],
+  availableYears: [],
   filters: {
     gender: 'all',
     ageGroup: undefined,
@@ -100,6 +103,9 @@ function dataReducer(state: DataState, action: DataAction): DataState {
         series: action.payload,
         selectedSeries: action.payload[0]?.id || null
       };
+      
+    case 'SET_AVAILABLE_YEARS':
+      return { ...state, availableYears: action.payload };
       
     case 'SET_FILTERS':
       return { 
@@ -173,7 +179,6 @@ interface DataContextValue {
   // Computed values
   filteredStandings: SeriesStanding[];
   filteredRunners: Runner[];
-  availableYears: number[];
   availableAgeGroups: string[];
   
   // Actions
@@ -182,6 +187,7 @@ interface DataContextValue {
   selectSeries: (seriesId: string | null) => void;
   selectYear: (year: number) => void;
   refreshData: () => Promise<void>;
+  loadAvailableYears: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -272,11 +278,6 @@ export function DataProvider({ children }: DataProviderProps) {
     return state.runners.filter(runner => runner.isActive);
   }, [state.runners]);
 
-  const availableYears = React.useMemo(() => {
-    const years = new Set(state.races.map(race => race.year));
-    return Array.from(years).sort((a, b) => b - a);
-  }, [state.races]);
-
   const availableAgeGroups = React.useMemo(() => {
     const ageGroups = new Set(state.runners.map(runner => runner.ageGroup));
     return Array.from(ageGroups).sort();
@@ -299,15 +300,26 @@ export function DataProvider({ children }: DataProviderProps) {
     dispatch({ type: 'SET_SELECTED_YEAR', payload: year });
   };
 
+  const loadAvailableYears = async () => {
+    try {
+      const years = await api.getAvailableYears();
+      dispatch({ type: 'SET_AVAILABLE_YEARS', payload: years });
+    } catch (error) {
+      console.error('Failed to load available years:', error);
+      // Fallback to current year if API fails
+      dispatch({ type: 'SET_AVAILABLE_YEARS', payload: [new Date().getFullYear()] });
+    }
+  };
+
   const refreshData = async () => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
     
     try {
-      // Load data from API endpoints
+      // Load data from API endpoints (races now filtered by year)
       const [runners, races, standings, series] = await Promise.all([
         api.getRunners(),
-        api.getRaces(state.selectedYear),
+        api.getRaces(state.selectedYear), // Only fetch races for selected year
         api.getStandings(state.selectedYear, state.selectedSeries || undefined),
         api.getSeries(),
       ]);
@@ -346,12 +358,15 @@ export function DataProvider({ children }: DataProviderProps) {
     });
   };
 
-  // Load initial data
+  // Load initial data and available years
   useEffect(() => {
+    // Load available years first (they don't change often and needed for year selector)
+    loadAvailableYears();
+    // Then load the main data
     refreshData();
   }, []);
 
-  // Refresh data when year changes
+  // Refresh data when year changes (but not available years)
   useEffect(() => {
     if (state.selectedYear) {
       refreshData();
@@ -363,13 +378,13 @@ export function DataProvider({ children }: DataProviderProps) {
     dispatch,
     filteredStandings,
     filteredRunners,
-    availableYears,
     availableAgeGroups,
     updateFilters,
     updateSort,
     selectSeries,
     selectYear,
-    refreshData
+    refreshData,
+    loadAvailableYears
   };
 
   return (
