@@ -13,20 +13,31 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Format time string (HH:MM:SS or MM:SS) to display format
+ * Drops hours if they are 0 to show cleaner MM:SS format
  */
-export function formatTime(timeStr: string): string {
+export function formatTime(timeStr: string | null | undefined): string {
   if (!timeStr) return '-';
   
-  const parts = timeStr.split(':');
+  // Ensure it's a string and clean it up
+  const cleanTimeStr = String(timeStr).trim();
+  
+  const parts = cleanTimeStr.split(':');
   if (parts.length === 3) {
-    // HH:MM:SS
+    // HH:MM:SS format
     const [hours, minutes, seconds] = parts;
-    return `${hours}:${minutes}:${seconds}`;
+    const hourNum = parseInt(hours, 10);
+    // Drop hours if they're 0
+    if (hourNum === 0) {
+      return `${minutes}:${seconds}`;
+    }
+    return `${hourNum}:${minutes}:${seconds}`;
   } else if (parts.length === 2) {
-    // MM:SS
-    return timeStr;
+    // MM:SS format - return as is
+    return cleanTimeStr;
   }
-  return timeStr;
+  
+  // Fallback - return cleaned string
+  return cleanTimeStr;
 }
 
 /**

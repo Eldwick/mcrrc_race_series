@@ -2,31 +2,57 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-gray-50 text-gray-900;
-    font-feature-settings: "rlig" 1, "calt" 1;
-  }
+/* Leaflet CSS fixes for React integration */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
 }
 
-@layer components {
-  .container {
-    @apply mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl;
+.leaflet-control-attribution {
+  font-size: 10px !important;
+}
+
+/* Course map specific styles */
+.course-map .leaflet-container {
+  font-family: inherit;
+}
+
+.course-map .leaflet-popup-content-wrapper {
+  border-radius: 8px;
+}
+
+.course-map .leaflet-popup-content {
+  margin: 8px 12px;
+  font-family: inherit;
+}
+
+/* Elevation profile styles */
+.elevation-profile svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.elevation-profile circle:hover {
+  r: 4;
+  stroke: #3b82f6;
+  stroke-width: 2;
+  fill: white;
+}
+
+/* Map markers */
+.start-marker,
+.finish-marker,
+.loop-marker {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Print styles */
+@media print {
+  .course-map {
+    break-inside: avoid;
   }
   
-  .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
-  }
-  
-  .btn {
-    @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
-  }
-  
-  .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700;
-  }
-  
-  .btn-secondary {
-    @apply btn bg-slate-100 text-slate-900 hover:bg-slate-200;
+  .elevation-profile {
+    break-inside: avoid;
   }
 }

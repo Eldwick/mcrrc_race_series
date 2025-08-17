@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Trophy, Users, Calendar } from 'lucide-react';
+import { Trophy, Users, Calendar, MapPin } from 'lucide-react';
 import { cn } from '../../utils';
 
 interface LayoutProps {
@@ -26,6 +26,12 @@ const navigation: NavItem[] = [
     href: '/races',
     icon: Calendar,
     description: 'Race results and schedules'
+  },
+  {
+    name: 'Courses',
+    href: '/courses',
+    icon: MapPin,
+    description: 'Race course records and history'
   },
   {
     name: 'Runners',

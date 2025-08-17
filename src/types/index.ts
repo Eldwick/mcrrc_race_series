@@ -157,6 +157,94 @@ export interface SeriesStanding {
   updatedAt: string;
 }
 
+// Race Course types
+export interface RaceCourse {
+  id: string;
+  name: string;
+  shortName?: string;
+  location?: string;
+  typicalDistance?: number;
+  courseType: 'road' | 'trail' | 'track' | 'cross-country';
+  establishedYear?: number;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  statistics?: {
+    yearsHeld: number;
+    totalRaces: number;
+    totalParticipants: number;
+    firstYear?: number;
+    lastYear?: number;
+  };
+}
+
+export interface CourseRace {
+  id: string;
+  name: string;
+  date: string;
+  year: number;
+  distanceMiles?: number;
+  location?: string;
+  mcrrcUrl?: string;
+  participantCount: number;
+  fastestTime?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CourseRecord {
+  year: number;
+  raceName: string;
+  raceDate: string;
+  distanceMiles?: number;
+  runner: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    gender: 'M' | 'F';
+    age: number;
+    ageGroup: string;
+    bibNumber: string;
+  };
+  results: {
+    gunTime: string;
+    chipTime?: string;
+    place: number;
+    placeGender: number;
+    placeAgeGroup: number;
+  };
+  rankings: {
+    overallRank: number;
+    genderRank: number;
+    ageGroupRank: number;
+  };
+  recordType?: string;
+}
+
+export interface PersonalRecord {
+  runner: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    gender: 'M' | 'F';
+  };
+  statistics: {
+    timesRun: number;
+    personalBest: string;
+    personalWorst: string;
+    averageTime: number;
+    firstYear: number;
+    lastYear: number;
+    improvement: number; // Seconds improved from worst to best
+  };
+}
+
+export interface CourseDetails extends RaceCourse {
+  races: CourseRace[];
+  records: CourseRecord[];
+}
+
 // API response types
 export interface ApiResponse<T> {
   data: T;
