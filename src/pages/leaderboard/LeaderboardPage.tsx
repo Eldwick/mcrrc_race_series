@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Trophy, Filter, Search, Calendar, Loader2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Input, Select, Badge, Button } from '../../components/ui';
-import { formatPlace, formatRunnerName, getRunnerInitials, StyledPlace } from '../../utils';
+import { formatPlace, formatRunnerName, StyledPlace } from '../../utils';
 
 interface MCRRCStanding {
   id: string;
@@ -327,7 +327,6 @@ export function LeaderboardPage() {
                     <th className="text-center py-3 px-2 font-medium text-gray-900">
                       Points
                     </th>
-                    <th className="text-center py-3 px-2 font-medium text-gray-900">Races</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -340,47 +339,70 @@ export function LeaderboardPage() {
                     // For display purposes, use index + 1 if rank is missing
                     const finalRank = displayRank || (index + 1);
                     
+                    // Calculate progress bar percentage and status
+                    const qualifyingRaces = 6; // MCRRC requirement for Q value
+                    const completedRaces = standing.racesParticipated;
+                    const progressPercentage = Math.min((completedRaces / qualifyingRaces) * 100, 100);
+                    const isQualified = completedRaces >= qualifyingRaces;
+                    
                     return (
-                      <tr key={standing.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-4 px-2 text-center">
-                          <StyledPlace place={finalRank} formatPlace={formatPlace} />
-                        </td>
+                      <>
+                        <tr key={standing.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-4 px-2 text-center">
+                            <StyledPlace place={finalRank} formatPlace={formatPlace} />
+                          </td>
+                          
+                          <td className="py-4 px-2">
+                            <Link
+                              to={`/runner/${runner.id}`}
+                              className="flex items-center gap-3 hover:text-primary-600 transition-colors"
+                            >
+                              <div>
+                                <p className="font-medium text-gray-900">
+                                  {formatRunnerName(runner.firstName, runner.lastName)}
+                                </p>
+                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                  <Badge variant="secondary" size="sm" className="text-xs">
+                                    {runner.ageGroup}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </Link>
+                          </td>
+                          
+                          <td className="py-4 px-2 text-center">
+                            <div className="text-lg font-semibold text-gray-900">
+                              {filters.category === 'overall' ? standing.overallPoints : standing.ageGroupPoints}
+                            </div>
+                          </td>
+                        </tr>
                         
-                        <td className="py-4 px-2">
-                          <Link
-                            to={`/runner/${runner.id}`}
-                            className="flex items-center gap-3 hover:text-primary-600 transition-colors"
-                          >
-                            <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
-                              <span className="text-sm font-medium text-primary-700">
-                                {getRunnerInitials(runner.firstName, runner.lastName)}
+                        {/* Progress bar row */}
+                        <tr key={`${standing.id}-progress`} className="border-b border-gray-100">
+                          <td colSpan={3} className="px-2 pb-3">
+                            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                              <span className="font-medium">
+                                {completedRaces}/{qualifyingRaces} Races completed
+                              </span>
+                              <span className={`font-medium ${
+                                isQualified ? 'text-green-600' : 'text-gray-600'
+                              }`}>
+                                {isQualified ? 'Qualified' : 'In Progress'}
                               </span>
                             </div>
-                            <div>
-                              <p className="font-medium text-gray-900">
-                                {formatRunnerName(runner.firstName, runner.lastName)}
-                              </p>
-                              <div className="flex items-center gap-2 text-sm text-gray-500">
-                                <Badge variant="secondary" size="sm" className="text-xs">
-                                  {runner.ageGroup}
-                                </Badge>
-                              </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full transition-all duration-300 ${
+                                  isQualified 
+                                    ? 'bg-green-500' 
+                                    : 'bg-primary-500'
+                                }`}
+                                style={{ width: `${progressPercentage}%` }}
+                              />
                             </div>
-                          </Link>
-                        </td>
-                        
-                        <td className="py-4 px-2 text-center">
-                          <div className="text-lg font-semibold text-gray-900">
-                            {filters.category === 'overall' ? standing.overallPoints : standing.ageGroupPoints}
-                          </div>
-                        </td>
-                        
-                        <td className="py-4 px-2 text-center">
-                          <span className="text-sm text-gray-600">
-                            {standing.racesParticipated}
-                          </span>
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                      </>
                     );
                   })}
                 </tbody>

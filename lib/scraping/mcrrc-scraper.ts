@@ -687,29 +687,25 @@ export class MCRRCScraper {
 
     // Handle series registration with robust conflict resolution
     try {
-      // First, check if this exact runner already has a registration in this series
-      const existingRunnerReg = await sql`
-        SELECT id, bib_number FROM series_registrations 
-        WHERE series_id = ${seriesId} AND runner_id = ${runnerId}
+      // Check if this exact runner + bib combination already exists in this series
+      const existingRunnerBib = await sql`
+        SELECT id FROM series_registrations 
+        WHERE series_id = ${seriesId} AND runner_id = ${runnerId} AND bib_number = ${runner.bibNumber}
       ` as any[];
 
-      if (existingRunnerReg.length > 0) {
-        // This runner already has a registration - update it
-        const regId = existingRunnerReg[0].id;
-        const oldBib = existingRunnerReg[0].bib_number;
+      if (existingRunnerBib.length > 0) {
+        // This exact runner + bib combination exists - just update age info
+        const regId = existingRunnerBib[0].id;
         
         await sql`
           UPDATE series_registrations SET
-            bib_number = ${runner.bibNumber},
             age = ${runner.age},
             age_group = ${ageGroup},
             updated_at = NOW()
           WHERE id = ${regId}
         `;
         
-        if (oldBib !== runner.bibNumber) {
-          console.log(`   🔄 Updated bib for ${runner.firstName} ${runner.lastName}: ${oldBib} → ${runner.bibNumber}`);
-        }
+        console.log(`   ✅ Updated age info for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
         runnerUpdated = true;
       } else {
         // Check if this bib number is already taken by someone else
@@ -719,42 +715,50 @@ export class MCRRCScraper {
         ` as any[];
 
         if (bibConflict.length > 0) {
-          // Different runner has this bib number - this is normal across races
+          // Bib number already exists - check who owns it
           const conflictRunnerId = bibConflict[0].runner_id;
           
-          // Get details of the conflicting runner for logging
-          const conflictRunner = await sql`
-            SELECT first_name, last_name FROM runners WHERE id = ${conflictRunnerId}
-          ` as any[];
-          
-          if (conflictRunner.length > 0 && conflictRunnerId !== runnerId) {
-            console.log(`ℹ️  Bib ${runner.bibNumber}: ${runner.firstName} ${runner.lastName} (previously ${conflictRunner[0].first_name} ${conflictRunner[0].last_name} in another race)`);
+          if (conflictRunnerId !== runnerId) {
+            // Different runner has this bib - this is a bib reassignment
+            const conflictRunner = await sql`
+              SELECT first_name, last_name FROM runners WHERE id = ${conflictRunnerId}
+            ` as any[];
             
-            // Update the existing registration to the new runner
-            // This preserves race results while updating the registration
-            await sql`
-              UPDATE series_registrations 
-              SET runner_id = ${runnerId}, age = ${runner.age}, age_group = ${ageGroup}, updated_at = NOW()
-              WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
-            `;
-            console.log(`   🔄 Updated registration for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
-          } else if (conflictRunnerId === runnerId) {
-            // Same runner, same bib - just update age/age_group in case they changed
-            await sql`
-              UPDATE series_registrations 
-              SET age = ${runner.age}, age_group = ${ageGroup}, updated_at = NOW()
-              WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
-            `;
-            console.log(`   🔄 Updated age info for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
+            if (conflictRunner.length > 0) {
+              console.log(`⚠️  Bib reassignment: Bib ${runner.bibNumber} transferring from ${conflictRunner[0].first_name} ${conflictRunner[0].last_name} to ${runner.firstName} ${runner.lastName}`);
+              
+              // Reassign the bib to the new runner (preserving race results linked to this registration)
+              await sql`
+                UPDATE series_registrations 
+                SET runner_id = ${runnerId}, age = ${runner.age}, age_group = ${ageGroup}, updated_at = NOW()
+                WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
+              `;
+              console.log(`   🔄 Bib ${runner.bibNumber} reassigned to ${runner.firstName} ${runner.lastName}`);
+              runnerUpdated = true;
+            }
+          } else {
+            // Same runner already has this bib - this was handled above in the first condition
+            console.log(`   ℹ️  Duplicate processing of ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
           }
-          
-          // Registration was updated above - no need to create new one
         } else {
           // No conflicts - create new registration
           await sql`
             INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
             VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
           `;
+          
+          // Check if this runner has other bib numbers in this series (indicating a bib change)
+          const otherBibs = await sql`
+            SELECT bib_number FROM series_registrations 
+            WHERE series_id = ${seriesId} AND runner_id = ${runnerId} AND bib_number != ${runner.bibNumber}
+          ` as any[];
+          
+          if (otherBibs.length > 0) {
+            const bibList = otherBibs.map((b: any) => b.bib_number).join(', ');
+            console.log(`   🔄 ${runner.firstName} ${runner.lastName} changed bib number: had ${bibList}, now also has ${runner.bibNumber}`);
+          } else {
+            console.log(`   ✅ New registration: ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
+          }
         }
       }
     } catch (error) {
@@ -884,6 +888,8 @@ export class MCRRCScraper {
             age = EXCLUDED.age,
             age_group = EXCLUDED.age_group,
             updated_at = NOW()
+        -- Note: With the UNIQUE(series_id, runner_id) constraint removed, 
+        -- runners can now have multiple registrations if they change bib numbers
         `;
       } catch (error) {
         // Last resort: if we still get a constraint error, log and continue

@@ -228,7 +228,7 @@ export function RacesListPage() {
                     {hasResults ? (
                       <div className="pt-4 border-t border-gray-200">
                         {/* Stats Row */}
-                        <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
                           <div className="text-center">
                             <div className="text-lg font-bold text-gray-900">
                               {summary.totalParticipants}
@@ -240,12 +240,6 @@ export function RacesListPage() {
                               {summary.completed}
                             </div>
                             <div className="text-xs text-gray-500">Finished</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-red-600">
-                              {summary.dnfDq}
-                            </div>
-                            <div className="text-xs text-gray-500">DNF/DQ</div>
                           </div>
                         </div>
 

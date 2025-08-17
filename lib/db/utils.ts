@@ -605,8 +605,9 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
   console.log('👥 Step 3: Fetching participants...');
   const participantStart = Date.now();
   
+  // Get unique participants (one per runner, even if they have multiple bib numbers)
   const participants = await sql`
-    SELECT DISTINCT 
+    SELECT DISTINCT ON (sr.runner_id)
       sr.runner_id,
       r.first_name,
       r.last_name, 
@@ -619,6 +620,7 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
     JOIN race_results rr ON sr.id = rr.series_registration_id
     JOIN races ra ON rr.race_id = ra.id
     WHERE sr.series_id = ${seriesId} AND ra.year = ${year}
+    ORDER BY sr.runner_id, sr.created_at DESC  -- Use most recent registration info
   ` as any[];
 
   console.log(`   ✅ Found ${participants.length} participants`);
@@ -638,7 +640,7 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
     
     // Process batch of participants
     await Promise.all(batch.map(async (participant: any) => {
-      // Get all race results for this runner in one query
+      // Get all race results for this runner across ALL their registrations/bib numbers
       const raceResults = await sql`
         SELECT 
           rr.*,
