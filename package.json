@@ -15,6 +15,7 @@
     "migrate:create": "node-pg-migrate create",
     "migrate:status": "node-pg-migrate up --dry-run",
     "migrate:redo": "node-pg-migrate down && node-pg-migrate up",
+    "db:reset": "tsx scripts/reset-database.ts",
     "seed:races": "tsx scripts/seed-championship-series-races.ts",
     "seed:races:scrape": "tsx scripts/seed-championship-series-races.ts --scrape-completed",
     "seed:races:planned-only": "tsx scripts/seed-championship-series-races.ts --planned-only",

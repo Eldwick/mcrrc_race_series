@@ -605,15 +605,13 @@ export class MCRRCScraper {
         console.log(`📅 Updated planned race "${matchingPlannedRace.name}" status to 'scraped'`);
       }
 
-      // 2. Process runners and create series registrations
+      // 2. Process runners and create series registrations (OPTIMIZED)
       console.log(`👥 Processing ${scrapedRace.runners.length} runners...`);
-      let runnersCreated = 0, runnersUpdated = 0;
-      for (const runner of scrapedRace.runners) {
-        const { created, updated } = await this.storeRunnerData(sql, runner, seriesId);
-        if (created) runnersCreated++;
-        if (updated) runnersUpdated++;
+      const runnerProcessingResult = await this.storeRunnersDataOptimized(sql, scrapedRace.runners, seriesId);
+      console.log(`   ✨ Created ${runnerProcessingResult.runnersCreated} new runners, 🔄 updated ${runnerProcessingResult.runnersUpdated} existing runners`);
+      if (runnerProcessingResult.conflictsResolved > 0) {
+        console.log(`   🔄 Resolved ${runnerProcessingResult.conflictsResolved} bib conflicts in batch`);
       }
-      console.log(`   ✨ Created ${runnersCreated} new runners, 🔄 updated ${runnersUpdated} existing runners`);
 
       // 3. Clean up old race results if re-scraping (for data integrity)
       if (!isNewRace) {
@@ -770,6 +768,141 @@ export class MCRRCScraper {
     }
 
     return { created: runnerCreated, updated: runnerUpdated };
+  }
+
+  /**
+   * OPTIMIZED: Store runner data in batch with optimized conflict resolution
+   */
+  private async storeRunnersDataOptimized(sql: any, runners: ScrapedRunner[], seriesId: string): Promise<{
+    runnersCreated: number;
+    runnersUpdated: number;
+    conflictsResolved: number;
+  }> {
+    let runnersCreated = 0;
+    let runnersUpdated = 0;
+    
+    // OPTIMIZATION 1: Pre-load all existing registrations to detect conflicts upfront
+    const existingRegistrations = await sql`
+      SELECT bib_number, runner_id FROM series_registrations 
+      WHERE series_id = ${seriesId}
+    ` as any[];
+    
+    const bibToRunnerMap = new Map<string, string>();
+    existingRegistrations.forEach((reg: any) => {
+      bibToRunnerMap.set(reg.bib_number, reg.runner_id);
+    });
+
+    // OPTIMIZATION 2: Process all runners and collect conflicts upfront
+    const conflicts: Array<{bibNumber: string, oldRunnerId: string, newRunnerId: string, runner: ScrapedRunner}> = [];
+    const runnerCache = new Map<string, string>(); // fullName -> runnerId
+    
+    // Pre-process all runners to identify conflicts and get/create runner IDs
+    for (const runner of runners) {
+      const fullName = `${runner.firstName}|${runner.lastName}`;
+      let runnerId = runnerCache.get(fullName);
+      
+      if (!runnerId) {
+        // Calculate values needed for runner
+        const currentYear = new Date().getFullYear();
+        const birthYear = currentYear - runner.age;
+        
+        // Check if runner exists
+        const existingRunner = await sql`
+          SELECT id FROM runners 
+          WHERE first_name = ${runner.firstName} AND last_name = ${runner.lastName} AND birth_year = ${birthYear}
+        ` as any[];
+
+        if (existingRunner.length > 0) {
+          runnerId = existingRunner[0].id;
+          // Update existing runner info
+          await sql`
+            UPDATE runners SET
+              gender = ${runner.gender},
+              club = ${runner.club || null},
+              updated_at = NOW()
+            WHERE id = ${runnerId}
+          `;
+          runnersUpdated++;
+        } else {
+          // Create new runner
+          const newRunner = await sql`
+            INSERT INTO runners (first_name, last_name, gender, birth_year, club)
+            VALUES (${runner.firstName}, ${runner.lastName}, ${runner.gender}, ${birthYear}, ${runner.club || null})
+            RETURNING id
+          ` as any[];
+          runnerId = newRunner[0].id;
+          runnersCreated++;
+        }
+        
+        runnerCache.set(fullName, runnerId!);
+      }
+
+      // Check for bib conflicts using pre-loaded map
+      if (runnerId) {
+        const existingRunnerId = bibToRunnerMap.get(runner.bibNumber);
+        if (existingRunnerId && existingRunnerId !== runnerId) {
+          conflicts.push({
+            bibNumber: runner.bibNumber,
+            oldRunnerId: existingRunnerId,
+            newRunnerId: runnerId,
+            runner: runner
+          });
+          // Update the map for subsequent conflict detection
+          bibToRunnerMap.set(runner.bibNumber, runnerId);
+        } else if (!existingRunnerId) {
+          // No existing registration for this bib
+          bibToRunnerMap.set(runner.bibNumber, runnerId);
+        }
+      }
+    }
+
+    // OPTIMIZATION 3: Batch resolve all bib conflicts at once
+    if (conflicts.length > 0) {
+      const conflictingBibs = conflicts.map(c => c.bibNumber);
+      await sql`
+        DELETE FROM series_registrations 
+        WHERE series_id = ${seriesId} AND bib_number = ANY(${conflictingBibs})
+      `;
+    }
+
+    // OPTIMIZATION 4: Bulk upsert all registrations
+    for (const runner of runners) {
+      const fullName = `${runner.firstName}|${runner.lastName}`;
+      const runnerId = runnerCache.get(fullName);
+      if (!runnerId) {
+        console.error(`❌ Runner ID not found in cache for ${runner.firstName} ${runner.lastName}`);
+        continue;
+      }
+      
+      const ageGroup = this.getAgeGroup(runner.age);
+      
+      try {
+        await sql`
+          INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
+          VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
+          ON CONFLICT (series_id, bib_number) DO UPDATE SET
+            runner_id = EXCLUDED.runner_id,
+            age = EXCLUDED.age,
+            age_group = EXCLUDED.age_group,
+            updated_at = NOW()
+        `;
+      } catch (error) {
+        // Last resort: if we still get a constraint error, log and continue
+        if (error instanceof Error && error.message.includes('duplicate key value violates unique constraint')) {
+          console.error(`❌ Failed to resolve bib conflict for ${runner.firstName} ${runner.lastName} (bib ${runner.bibNumber})`);
+          console.error(`   Skipping this registration to allow scraping to continue`);
+          continue;
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    return {
+      runnersCreated,
+      runnersUpdated,
+      conflictsResolved: conflicts.length
+    };
   }
 
   /**

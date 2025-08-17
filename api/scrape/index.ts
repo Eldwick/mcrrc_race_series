@@ -204,7 +204,7 @@ async function handleScrapeAll(year?: number, seriesId?: string): Promise<any> {
 
       // Add delay between requests to be respectful
       if (i < urls.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Reduced from 2s to 1s
       }
 
     } catch (error) {

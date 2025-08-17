@@ -51,7 +51,7 @@ const COMPLETED_RACES_2025: CompletedRace[] = [
   {
     date: "Apr 12",
     name: "Capital for a Day 5K",
-    url: "https://mcrrc.org/race-result/capital-for-a-day-5k-3/",
+    url: "https://mcrrc.org/race-result/capital-for-a-day-3/",
     order: 3
   },
   {
@@ -293,8 +293,8 @@ async function scrapeCompletedRaces(seriesId: string): Promise<void> {
 
       // Add delay between requests to be respectful to MCRRC servers
       if (index < COMPLETED_RACES_2025.length - 1) {
-        console.log('   ⏳ Waiting 3 seconds before next scrape...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        console.log('   ⏳ Waiting 1 second before next scrape...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Reduced from 3s to 1s
       }
 
     } catch (error) {

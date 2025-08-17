@@ -73,8 +73,8 @@ async function fixFailedRaces(): Promise<void> {
 
       // Add delay between requests to be respectful
       if (index < FAILED_RACES.length - 1) {
-        console.log('   ⏳ Waiting 2 seconds before next scrape...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('   ⏳ Waiting 1 second before next scrape...');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Reduced from 2s to 1s
       }
 
     } catch (error) {

@@ -13,11 +13,6 @@ export const up = (pgm) => {
   pgm.alterColumn('races', 'distance_miles', {
     allowNull: true,
   });
-  
-  // Add a comment to explain the nullable distance
-  pgm.addComment('races', 'distance_miles', 
-    'Race distance in miles. May be NULL if distance cannot be determined from race data.'
-  );
 };
 
 /**
@@ -26,9 +21,6 @@ export const up = (pgm) => {
  * @returns {Promise<void> | void}
  */
 export const down = (pgm) => {
-  // Remove comment
-  pgm.removeComment('races', 'distance_miles');
-  
   // Make distance_miles NOT NULL again (this will fail if there are NULL values)
   pgm.alterColumn('races', 'distance_miles', {
     allowNull: false,
