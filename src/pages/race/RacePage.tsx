@@ -217,25 +217,7 @@ export function RacePage() {
             )}
           </div>
 
-          {/* Race Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{raceResults.length}</div>
-              <div className="text-sm text-gray-600">Total Finishers</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {raceResults.filter(r => !r.isDNF && !r.isDQ).length}
-              </div>
-              <div className="text-sm text-gray-600">Completed</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
-                {raceResults.filter(r => r.isDNF || r.isDQ).length}
-              </div>
-              <div className="text-sm text-gray-600">DNF/DQ</div>
-            </div>
-          </div>
+
         </CardContent>
       </Card>
 

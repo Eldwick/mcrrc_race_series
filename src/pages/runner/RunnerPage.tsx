@@ -11,8 +11,13 @@ const formatTimeObject = (timeObj: any): string => {
   if (!timeObj) return '-';
   if (typeof timeObj === 'string') return timeObj;
   
+  const hours = timeObj.hours || 0;
   const minutes = timeObj.minutes || 0;
   const seconds = timeObj.seconds || 0;
+  
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
