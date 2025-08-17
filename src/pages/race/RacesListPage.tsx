@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Trophy, Users, Clock, Loader2, ExternalLink } from 'lucide-react';
+import { Calendar, MapPin, Trophy, Clock, Loader2, ExternalLink } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardContent, Badge } from '../../components/ui';
 import { formatDate, formatRunnerName, getRunnerInitials } from '../../utils';
@@ -117,56 +117,42 @@ export function RacesListPage() {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
+      {/* Race Summary Stats */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-3 gap-6">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex items-center justify-center w-12 h-12 bg-primary-50 rounded-full mb-3">
+                <Calendar className="w-6 h-6 text-primary-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-1">
                 {currentYearRaces.length}
               </h3>
               <p className="text-sm text-gray-600">Total Races</p>
             </div>
-            <Calendar className="w-8 h-8 text-primary-600" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
+            
+            <div className="flex flex-col items-center text-center">
+              <div className="flex items-center justify-center w-12 h-12 bg-green-50 rounded-full mb-3">
+                <Trophy className="w-6 h-6 text-green-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-1">
                 {currentYearRaces.filter(r => r.raceStatus === 'scraped').length}
               </h3>
               <p className="text-sm text-gray-600">Completed</p>
             </div>
-            <Trophy className="w-8 h-8 text-green-600" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
+            
+            <div className="flex flex-col items-center text-center">
+              <div className="flex items-center justify-center w-12 h-12 bg-blue-50 rounded-full mb-3">
+                <Clock className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-1">
                 {currentYearRaces.filter(r => r.raceStatus === 'planned').length}
               </h3>
               <p className="text-sm text-gray-600">Upcoming</p>
             </div>
-            <Clock className="w-8 h-8 text-blue-600" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {currentYearRaces.reduce((total, race) => total + (race.summary?.totalParticipants || 0), 0)}
-              </h3>
-              <p className="text-sm text-gray-600">Total Results</p>
-            </div>
-            <Users className="w-8 h-8 text-purple-600" />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Races List */}
       <div className="space-y-4">
