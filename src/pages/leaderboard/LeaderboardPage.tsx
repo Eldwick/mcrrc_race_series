@@ -144,7 +144,7 @@ export function LeaderboardPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">MCRRC Championship Series</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Championship Series</h1>
           <div className="mt-2">
             <h2 className="text-xl font-semibold text-primary-600">
               {filters.gender === 'M' ? "Men's" : "Women's"} {" "}
@@ -168,29 +168,15 @@ export function LeaderboardPage() {
         </div>
         
         <div className="flex flex-col gap-4">
-          {/* Category and Gender Controls */}
-          <div className="flex flex-wrap gap-2">
-            {/* Category Dropdown */}
-            <Select
-              value={filters.category}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="min-w-32"
-            >
-              <option value="overall">Overall</option>
-              {availableAgeGroups.map(ageGroup => (
-                <option key={ageGroup} value={ageGroup}>
-                  {ageGroup}
-                </option>
-              ))}
-            </Select>
-
+          {/* Main Filters - Mobile Friendly */}
+          <div className="flex flex-col sm:flex-row gap-3">
             {/* Gender Toggle */}
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               <Button
                 variant={filters.gender === 'M' ? 'primary' : 'ghost'}
                 size="sm"
                 onClick={() => handleGenderChange('M')}
-                className="rounded-none border-r"
+                className="rounded-none border-r flex-1"
               >
                 Men
               </Button>
@@ -198,88 +184,86 @@ export function LeaderboardPage() {
                 variant={filters.gender === 'F' ? 'primary' : 'ghost'}
                 size="sm"
                 onClick={() => handleGenderChange('F')}
-                className="rounded-none"
+                className="rounded-none flex-1"
               >
                 Women
               </Button>
             </div>
-          </div>
 
-          {/* Traditional Controls */}
-          <div className="flex items-center gap-4">
-            {/* Year Selector */}
+            {/* Category Dropdown */}
             <Select
-              value={filters.year.toString()}
-              onChange={(e) => handleYearChange(parseInt(e.target.value))}
-              className="w-24"
+              value={filters.category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              className="flex-1 min-w-32"
             >
-              {availableYears.map(year => (
-                <option key={year} value={year.toString()}>
-                  {year}
+              <option value="overall">Overall</option>
+              {availableAgeGroups.filter(ageGroup => ageGroup && ageGroup.trim() !== '').map(ageGroup => (
+                <option key={ageGroup} value={ageGroup}>
+                  {ageGroup}
                 </option>
               ))}
             </Select>
 
-            {/* Filter Toggle */}
+            {/* More Filters Toggle */}
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2"
+              className="flex items-center justify-center gap-2 px-3"
             >
               <Filter className="w-4 h-4" />
-              More Filters
+              <span className="hidden sm:inline">More</span>
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Filters Panel */}
+      {/* Hidden Filters Panel */}
       {showFilters && (
         <Card>
-          <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Category Selection */}
-          <Select
-            value={filters.category}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-          >
-            <option value="overall">Overall</option>
-            {availableAgeGroups.map(ageGroup => (
-              <option key={ageGroup} value={ageGroup}>
-                {ageGroup}
-              </option>
-            ))}
-          </Select>
+          <CardContent className="p-4">
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Additional Filters</h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Year Selector */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-2">Year</label>
+                  <Select
+                    value={filters.year.toString()}
+                    onChange={(e) => handleYearChange(parseInt(e.target.value))}
+                  >
+                    {availableYears.map(year => (
+                      <option key={year} value={year.toString()}>
+                        {year}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
-          {/* Gender Selection */}
-          <Select
-            value={filters.gender}
-            onChange={(e) => handleGenderChange(e.target.value as 'M' | 'F')}
-          >
-            <option value="M">Men</option>
-            <option value="F">Women</option>
-          </Select>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search runners..."
-              value={filters.searchText}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          {/* Clear Search */}
-          <Button
-            variant="outline"
-            onClick={() => setFilters(prev => ({ ...prev, searchText: '' }))}
-            disabled={!filters.searchText}
-          >
-            Clear Search
-          </Button>
-        </div>
+                {/* Search */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-2">Search Runner</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                      placeholder="Name or bib number..."
+                      value={filters.searchText}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  {filters.searchText && (
+                    <button
+                      onClick={() => setFilters(prev => ({ ...prev, searchText: '' }))}
+                      className="text-xs text-primary-600 hover:text-primary-700 mt-1"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
