@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Trophy, Users, Calendar, Settings } from 'lucide-react';
+import { Trophy, Users, Calendar } from 'lucide-react';
 import { cn } from '../../utils';
 
 interface LayoutProps {
@@ -32,13 +32,8 @@ const navigation: NavItem[] = [
     href: '/races',
     icon: Calendar,
     description: 'Race results and schedules'
-  },
-  {
-    name: 'Admin',
-    href: '/admin',
-    icon: Settings,
-    description: 'Manage data and settings'
   }
+  // Admin page removed from navigation - accessible only via direct URL (/admin)
 ];
 
 export function Layout({ children }: LayoutProps) {

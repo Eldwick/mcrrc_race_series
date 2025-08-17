@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, Download, RefreshCw, Settings, Database, Users, Calendar, Plus, Trash2, Edit3 } from 'lucide-react';
+import { Upload, Download, RefreshCw, Settings, Database, Users, Calendar, Plus, Trash2 } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '../../components/ui';
 
