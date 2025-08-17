@@ -394,6 +394,33 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
       process.exit(1);
     }
 
+    // Ensure the series record exists first
+    console.log('📋 Ensuring series record exists...');
+    const existingSeries = await sql`
+      SELECT id, name, year 
+      FROM series 
+      WHERE id = ${DEFAULT_SERIES_ID}
+    `;
+
+    if (existingSeries.length === 0) {
+      console.log('   🆕 Creating MCRRC Championship Series record...');
+      await sql`
+        INSERT INTO series (id, name, year, description, start_date, end_date, is_active)
+        VALUES (
+          ${DEFAULT_SERIES_ID},
+          'MCRRC Championship Series',
+          ${TARGET_YEAR},
+          'Montgomery County Road Runners Club Championship Series - Points-based competition across multiple races throughout the year',
+          '2025-01-01'::date,
+          '2025-12-31'::date,
+          true
+        )
+      `;
+      console.log('   ✅ Series record created successfully');
+    } else {
+      console.log(`   ✅ Series record already exists: "${existingSeries[0].name}" (${existingSeries[0].year})`);
+    }
+
     // Get existing data
     const existingScrapedRaces = await sql`
       SELECT id, name, distance_miles, planned_race_id
@@ -596,7 +623,7 @@ function getEstimatedDate(month: string, year: number): string {
 }
 
 // Run the seeding function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   seedChampionshipSeriesRaces()
     .then(() => {
       console.log('✅ Championship series races seeded successfully!');

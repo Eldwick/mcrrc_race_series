@@ -3,7 +3,7 @@
 // POST /api/series/races - Add a new race to the series
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSql } from '../../../lib/db/connection';
+import { getSql } from '../../../lib/db/connection.js';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

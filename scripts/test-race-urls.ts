@@ -143,7 +143,7 @@ async function testRaceUrls(): Promise<void> {
 }
 
 // Run the test function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   testRaceUrls()
     .then(() => {
       console.log('\n✨ Race URL test complete!');

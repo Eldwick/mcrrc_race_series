@@ -2,7 +2,7 @@
 // POST /api/runners - Create a new runner
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAllRunners } from '../../lib/db/utils';
+import { getAllRunners } from '../../lib/db/utils.js';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

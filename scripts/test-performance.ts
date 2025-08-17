@@ -263,7 +263,7 @@ async function testPerformance(): Promise<void> {
 }
 
 // Run the test function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   testPerformance()
     .then(() => {
       console.log('\n✨ Performance testing complete!');

@@ -131,7 +131,7 @@ async function testUpcomingRaces(): Promise<void> {
 }
 
 // Run the test function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   testUpcomingRaces()
     .then(() => {
       console.log('\n✨ Upcoming races test complete!');

@@ -3,7 +3,7 @@
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { getSql } from '../db/connection';
+import { getSql } from '../db/connection.js';
 
 export interface ScrapedRunner {
   bibNumber: string;
@@ -719,34 +719,36 @@ export class MCRRCScraper {
         ` as any[];
 
         if (bibConflict.length > 0) {
-          // Bib number conflict - resolve by updating the conflicting registration
+          // Different runner has this bib number - this is normal across races
           const conflictRunnerId = bibConflict[0].runner_id;
-          console.warn(`⚠️ Bib conflict for ${runner.bibNumber}: already assigned to runner ${conflictRunnerId}`);
           
           // Get details of the conflicting runner for logging
           const conflictRunner = await sql`
             SELECT first_name, last_name FROM runners WHERE id = ${conflictRunnerId}
           ` as any[];
           
-          if (conflictRunner.length > 0) {
-            console.warn(`   Current holder: ${conflictRunner[0].first_name} ${conflictRunner[0].last_name}`);
-            console.warn(`   New claimant: ${runner.firstName} ${runner.lastName}`);
+          if (conflictRunner.length > 0 && conflictRunnerId !== runnerId) {
+            console.log(`ℹ️  Bib ${runner.bibNumber}: ${runner.firstName} ${runner.lastName} (previously ${conflictRunner[0].first_name} ${conflictRunner[0].last_name} in another race)`);
+            
+            // Update the existing registration to the new runner
+            // This preserves race results while updating the registration
+            await sql`
+              UPDATE series_registrations 
+              SET runner_id = ${runnerId}, age = ${runner.age}, age_group = ${ageGroup}, updated_at = NOW()
+              WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
+            `;
+            console.log(`   🔄 Updated registration for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
+          } else if (conflictRunnerId === runnerId) {
+            // Same runner, same bib - just update age/age_group in case they changed
+            await sql`
+              UPDATE series_registrations 
+              SET age = ${runner.age}, age_group = ${ageGroup}, updated_at = NOW()
+              WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
+            `;
+            console.log(`   🔄 Updated age info for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
           }
           
-          // Strategy: Remove the old registration and create new one
-          // This handles cases where bib numbers are reused across races
-          await sql`
-            DELETE FROM series_registrations 
-            WHERE series_id = ${seriesId} AND bib_number = ${runner.bibNumber}
-          `;
-          console.warn(`   🗑️ Removed conflicting registration`);
-          
-          // Now create the new registration
-          await sql`
-            INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
-            VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
-          `;
-          console.log(`   ✨ Created new registration for ${runner.firstName} ${runner.lastName} with bib ${runner.bibNumber}`);
+          // Registration was updated above - no need to create new one
         } else {
           // No conflicts - create new registration
           await sql`
@@ -781,7 +783,9 @@ export class MCRRCScraper {
     let runnersCreated = 0;
     let runnersUpdated = 0;
     
-    // OPTIMIZATION 1: Pre-load all existing registrations to detect conflicts upfront
+    // OPTIMIZATION 1: Pre-load all existing registrations to avoid N+1 queries
+    // NOTE: Bib numbers are race-specific, not series-wide unique!
+    // The same bib number can be used by different people in different races.
     const existingRegistrations = await sql`
       SELECT bib_number, runner_id FROM series_registrations 
       WHERE series_id = ${seriesId}
@@ -792,11 +796,10 @@ export class MCRRCScraper {
       bibToRunnerMap.set(reg.bib_number, reg.runner_id);
     });
 
-    // OPTIMIZATION 2: Process all runners and collect conflicts upfront
-    const conflicts: Array<{bibNumber: string, oldRunnerId: string, newRunnerId: string, runner: ScrapedRunner}> = [];
+    // OPTIMIZATION 2: Process all runners and cache runner IDs
     const runnerCache = new Map<string, string>(); // fullName -> runnerId
     
-    // Pre-process all runners to identify conflicts and get/create runner IDs
+    // Pre-process all runners to get/create runner IDs and prepare for bulk operations
     for (const runner of runners) {
       const fullName = `${runner.firstName}|${runner.lastName}`;
       let runnerId = runnerCache.get(fullName);
@@ -837,33 +840,29 @@ export class MCRRCScraper {
         runnerCache.set(fullName, runnerId!);
       }
 
-      // Check for bib conflicts using pre-loaded map
+      // Update the bib-to-runner mapping for registration upserts
+      // NOTE: We no longer treat different runners with same bib as "conflicts"
+      // because bib numbers are race-specific, not series-wide unique
       if (runnerId) {
         const existingRunnerId = bibToRunnerMap.get(runner.bibNumber);
         if (existingRunnerId && existingRunnerId !== runnerId) {
-          conflicts.push({
-            bibNumber: runner.bibNumber,
-            oldRunnerId: existingRunnerId,
-            newRunnerId: runnerId,
-            runner: runner
-          });
-          // Update the map for subsequent conflict detection
+          // Different runner claiming same bib - this is normal across races
+          // Log it for visibility but don't treat as error
+          console.log(`ℹ️  Bib ${runner.bibNumber}: ${runner.firstName} ${runner.lastName} (was assigned to different runner in another race)`);
+          // Update the mapping to the new runner for this batch
           bibToRunnerMap.set(runner.bibNumber, runnerId);
         } else if (!existingRunnerId) {
-          // No existing registration for this bib
+          // New bib registration
           bibToRunnerMap.set(runner.bibNumber, runnerId);
         }
+        // If existingRunnerId === runnerId, same runner same bib - no action needed
       }
     }
 
-    // OPTIMIZATION 3: Batch resolve all bib conflicts at once
-    if (conflicts.length > 0) {
-      const conflictingBibs = conflicts.map(c => c.bibNumber);
-      await sql`
-        DELETE FROM series_registrations 
-        WHERE series_id = ${seriesId} AND bib_number = ANY(${conflictingBibs})
-      `;
-    }
+    // OPTIMIZATION 3: No longer doing aggressive conflict resolution
+    // Previously this would delete ALL registrations with conflicting bib numbers,
+    // which caused cascade deletion of race results across multiple races.
+    // Now we use intelligent upsert logic instead.
 
     // OPTIMIZATION 4: Bulk upsert all registrations
     for (const runner of runners) {
@@ -901,7 +900,7 @@ export class MCRRCScraper {
     return {
       runnersCreated,
       runnersUpdated,
-      conflictsResolved: conflicts.length
+      conflictsResolved: 0 // No longer doing aggressive conflict resolution
     };
   }
 

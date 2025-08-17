@@ -2,8 +2,8 @@
 // This endpoint triggers scraping of race results and stores them in the database
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { mcrrcScraper } from '../../lib/scraping/mcrrc-scraper';
-import { getSql } from '../../lib/db/connection';
+import { mcrrcScraper } from '../../lib/scraping/mcrrc-scraper.js';
+import { getSql } from '../../lib/db/connection.js';
 
 // Simple authentication for scraping endpoint
 const SCRAPING_SECRET = process.env.SCRAPING_SECRET || 'dev-scraping-secret';

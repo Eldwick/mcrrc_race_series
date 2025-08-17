@@ -2,7 +2,7 @@
 // Based on official rules: https://mcrrc.org/club-race-series/championship-series-cs/
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { calculateMCRRCStandings } from '../../../lib/db/utils';
+import { calculateMCRRCStandings } from '../../../lib/db/utils.js';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

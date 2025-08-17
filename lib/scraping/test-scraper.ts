@@ -1,8 +1,8 @@
 // Test utility for MCRRC scraper
 // Run with: npm run ts-node lib/scraping/test-scraper.ts
 
-import { mcrrcScraper } from './mcrrc-scraper';
-import { getSql } from '../db/connection';
+import { mcrrcScraper } from './mcrrc-scraper.js';
+import { getSql } from '../db/connection.js';
 
 async function testScraper() {
   console.log('🚀 Testing MCRRC Scraper...\n');

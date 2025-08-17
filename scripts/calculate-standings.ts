@@ -2,7 +2,7 @@
 /**
  * Calculate MCRRC Championship Series Standings
  * 
- * This script calls the standings calculation API to generate the leaderboard data.
+ * This script calculates standings directly using the database utilities.
  * Must be run after races have been scraped to see results on the leaderboard.
  * 
  * Usage:
@@ -10,152 +10,157 @@
  *   npx tsx scripts/calculate-standings.ts
  */
 
+import { calculateMCRRCStandings } from '../lib/db/utils.js';
+import { getSql } from '../lib/db/connection.js';
+
 // Default series ID - MCRRC Championship Series 2025
 const DEFAULT_SERIES_ID = 'f75a7257-ad21-495c-a127-69240dd0193d';
 const TARGET_YEAR = 2025;
 
-async function calculateStandings(baseUrl: string = 'http://localhost:3000'): Promise<void> {
+async function calculateStandings(): Promise<void> {
   const startTime = Date.now();
   
   try {
     console.log('🏆 Initiating MCRRC Championship Series Standings Calculation...');
     console.log(`📊 Series ID: ${DEFAULT_SERIES_ID}`);
     console.log(`📅 Year: ${TARGET_YEAR}`);
-    console.log(`🌐 API URL: ${baseUrl}/api/standings/calculate`);
     console.log('');
+    
+    // Verify data exists before calculation
+    const sql = getSql();
+    
+    console.log('🔍 Verifying data...');
+    const raceResults = await sql`
+      SELECT COUNT(*) as count
+      FROM race_results rr
+      JOIN series_registrations sr ON rr.series_registration_id = sr.id
+      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+    `;
+    
+    const races = await sql`
+      SELECT COUNT(*) as count
+      FROM races
+      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+    `;
+    
+    const plannedRaces = await sql`
+      SELECT COUNT(*) as count
+      FROM planned_races
+      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+    `;
+    
+    console.log(`   📊 Race results: ${raceResults[0].count}`);
+    console.log(`   🏁 Scraped races: ${races[0].count}`);
+    console.log(`   📅 Planned races: ${plannedRaces[0].count}`);
+    
+    if (raceResults[0].count === 0) {
+      console.log('⚠️  No race results found. Make sure races have been scraped first.');
+      console.log('   Run: npm run seed:races:scrape');
+      process.exit(1);
+    }
 
+    console.log('');
     console.log('⏳ Starting calculation (this may take a while for large datasets)...');
-    console.log('💡 Watch the server logs for detailed progress information');
+    
+    // Run the calculation
+    await calculateMCRRCStandings(DEFAULT_SERIES_ID, TARGET_YEAR);
+    
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    // Verify results
     console.log('');
-
-    // Add timeout for long-running calculations
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, 300000); // 5 minute timeout
-
-    const requestStart = Date.now();
-    const response = await fetch(`${baseUrl}/api/standings/calculate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        seriesId: DEFAULT_SERIES_ID,
-        year: TARGET_YEAR
-      }),
-      signal: controller.signal
+    console.log('🔍 Verifying calculation results...');
+    
+    const standings = await sql`
+      SELECT COUNT(*) as count
+      FROM series_standings ss
+      JOIN series_registrations sr ON ss.series_registration_id = sr.id
+      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+    `;
+    
+    console.log(`   🏆 Total standings calculated: ${standings[0].count}`);
+    
+    // Show top 5 results
+    const topResults = await sql`
+      SELECT 
+        r.first_name,
+        r.last_name,
+        r.gender,
+        s.overall_points,
+        s.age_group_points,
+        s.races_participated,
+        s.overall_rank
+      FROM series_standings s
+      JOIN series_registrations sr ON s.series_registration_id = sr.id
+      JOIN runners r ON sr.runner_id = r.id
+      WHERE sr.series_id = ${DEFAULT_SERIES_ID}
+      ORDER BY r.gender, s.overall_points DESC
+      LIMIT 10
+    `;
+    
+    console.log('');
+    console.log('🏆 Top Results by Gender:');
+    
+    const maleResults = topResults.filter(r => r.gender === 'M').slice(0, 5);
+    const femaleResults = topResults.filter(r => r.gender === 'F').slice(0, 5);
+    
+    console.log('');
+    console.log('👨 Men:');
+    maleResults.forEach((result, index) => {
+      const emoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '   ';
+      console.log(`   ${emoji} #${result.overall_rank} ${result.first_name} ${result.last_name} - ${result.overall_points} pts (${result.races_participated} races)`);
     });
-
-    clearTimeout(timeoutId);
-    const requestTime = Date.now() - requestStart;
-
-    console.log(`📡 API request completed in ${requestTime}ms (${Math.round(requestTime/1000)}s)`);
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error(`❌ HTTP Error ${response.status}:`);
-      console.error(`   Status: ${response.statusText}`);
-      console.error(`   Error: ${data.error || 'Unknown error'}`);
-      
-      if (data.message) {
-        console.error(`   Details: ${data.message}`);
-      }
-      
-      throw new Error(`HTTP ${response.status}: ${data.error || 'Unknown error'}`);
-    }
-
-    if (!data.success) {
-      console.error('❌ API returned failure response:');
-      console.error(`   Error: ${data.error || 'Unknown error'}`);
-      if (data.message) {
-        console.error(`   Message: ${data.message}`);
-      }
-      throw new Error(data.error || data.message || 'Calculation failed');
-    }
-
-    const totalTime = Date.now() - startTime;
     
     console.log('');
-    console.log('🎉 CALCULATION COMPLETED SUCCESSFULLY!');
-    console.log('=' .repeat(50));
-    console.log(`📊 Series: ${data.data.seriesId}`);
-    console.log(`📅 Year: ${data.data.year}`);  
-    console.log(`🕐 Calculated at: ${new Date(data.data.calculatedAt).toLocaleString()}`);
-    console.log(`⏱️  Total time: ${totalTime}ms (${Math.round(totalTime/1000)}s)`);
+    console.log('👩 Women:');
+    femaleResults.forEach((result, index) => {
+      const emoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '   ';
+      console.log(`   ${emoji} #${result.overall_rank} ${result.first_name} ${result.last_name} - ${result.overall_points} pts (${result.races_participated} races)`);
+    });
+    
     console.log('');
-    
-    console.log('✅ NEXT STEPS:');
-    console.log('   1. Check leaderboard: http://localhost:3000/leaderboard');
-    console.log('   2. Verify standings look correct');
-    console.log('   3. Test different filters (Overall vs Age Group)');
-    console.log('   4. Check individual runner pages');
+    console.log('✅ CALCULATION SUCCESSFUL!');
+    console.log('==============================');
+    console.log(`⏱️  Completed in: ${duration}ms (${(duration/1000).toFixed(1)}s)`);
+    console.log(`🏆 Total standings: ${standings[0].count}`);
     console.log('');
+    console.log('📝 Next Steps:');
+    console.log('   • Start frontend: npm run dev');
+    console.log('   • Visit leaderboard: http://localhost:3001/leaderboard');
+    console.log('   • Check specific runners: http://localhost:3001/runners');
     
-    console.log('📋 MCRRC SCORING RULES APPLIED:');
-    console.log('   • 10-9-8-7-6-5-4-3-2-1 points for top 10 M/F overall');
-    console.log('   • 10-9-8-7-6-5-4-3-2-1 points for top 10 M/F in age group');
-    console.log('   • Series score = sum of best Q races (Q = ceil(total_races/2))');
-    console.log('   • Separate overall and age group category standings');
-    console.log('   • Tie-breaking by races participated, then total time');
-
-  } catch (error) {
-    const totalTime = Date.now() - startTime;
+  } catch (error: any) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
     
-    console.error('');
     console.error('❌ CALCULATION FAILED');
-    console.error('=' .repeat(30));
-    console.error(`⏱️  Failed after: ${totalTime}ms (${Math.round(totalTime/1000)}s)`);
-    
-    if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        console.error('⏰ Calculation timed out after 5 minutes');
-        console.error('   This usually indicates:');
-        console.error('   • Very large dataset (many runners/races)');
-        console.error('   • Database performance issues');
-        console.error('   • Server overload');
-      } else {
-        console.error(`💥 Error: ${error.message}`);
-      }
-    } else {
-      console.error(`💥 Error: ${error}`);
-    }
-    
+    console.error('==============================');
+    console.error(`⏱️  Failed after: ${duration}ms (${(duration/1000).toFixed(1)}s)`);
+    console.error(`💥 Error: ${error.message}`);
     console.error('');
     console.error('🩺 TROUBLESHOOTING STEPS:');
-    console.error('   1. Check server is running: npm run dev');
-    console.error('   2. Verify data exists: npm run diagnose:leaderboard');
-    console.error('   3. Check server terminal for detailed logs');
-    console.error('   4. Look for database connection issues');
-    console.error('   5. Consider running with smaller dataset first');
+    console.error('   1. Verify data exists: npm run diagnose:leaderboard');
+    console.error('   2. Check database connection');
+    console.error('   3. Ensure races have been scraped first');
+    console.error('   4. Check for data inconsistencies');
     console.error('');
-    console.error('📊 PERFORMANCE TIPS:');
-    console.error('   • The optimized algorithm should handle 100+ runners efficiently');
-    console.error('   • Pre-calculated rankings eliminate N+1 query problems');
-    console.error('   • Batch processing provides progress updates');
-    console.error('   • Check database indexes are in place');
+    
+    if (error.stack) {
+      console.error('📋 Stack trace:');
+      console.error(error.stack);
+    }
     
     process.exit(1);
   }
 }
 
 // Run the calculation function if called directly
-if (require.main === module) {
-  // Parse command line args for custom base URL
-  const args = process.argv.slice(2);
-  const baseUrlArg = args.find(arg => arg.startsWith('--url='));
-  const baseUrl = baseUrlArg ? baseUrlArg.split('=')[1] : 'http://localhost:3000';
-
-  calculateStandings(baseUrl)
-    .then(() => {
-      console.log('✨ Done!');
-      process.exit(0);
-    })
+if (import.meta.url === `file://${process.argv[1]}`) {
+  calculateStandings()
+    .then(() => process.exit(0))
     .catch((error) => {
-      console.error('❌ Calculation script failed:', error);
+      console.error('💥 Calculation failed:', error);
       process.exit(1);
     });
 }
-
-export { calculateStandings };

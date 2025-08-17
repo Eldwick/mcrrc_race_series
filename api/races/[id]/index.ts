@@ -1,7 +1,7 @@
 // GET /api/races/[id] - Get a specific race by ID
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getRaceById } from '../../../lib/db/utils';
+import { getRaceById } from '../../../lib/db/utils.js';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

@@ -203,7 +203,7 @@ async function diagnoseLeaderboard(): Promise<void> {
 }
 
 // Run the diagnostic function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   diagnoseLeaderboard()
     .then(() => {
       console.log('\n🏁 Diagnostic complete!');

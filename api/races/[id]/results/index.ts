@@ -1,8 +1,7 @@
 // GET /api/races/[id]/results - Get race results for a specific race
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getRaceResults } from '../../../../lib/db/utils';
-import { formatTimeFromInterval } from '../../../../lib/db/utils';
+import { getRaceResults, formatTimeFromInterval } from '../../../../lib/db/utils.js';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

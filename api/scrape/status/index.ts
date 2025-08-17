@@ -2,7 +2,7 @@
 // This endpoint provides information about recent scraping activities
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSql } from '../../../lib/db/connection';
+import { getSql } from '../../../lib/db/connection.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS

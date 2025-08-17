@@ -197,14 +197,7 @@ export function RunnerPage() {
                       </div>
                       <div className="text-sm text-gray-600">Qualifying</div>
                     </div>
-                  </div>
-                  
-                  {/* MCRRC Scoring Explanation */}
-                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-700">
-                      <strong>MCRRC Championship Series Scoring:</strong> Overall points from top-10 M/F finish &bull; Age Group points from top-10 M/F in age group &bull; Overall rank uses Overall points, Age Group rank uses Age Group points
-                    </p>
-                  </div>
+                  </div>                  
                 </>
               )}
             </div>

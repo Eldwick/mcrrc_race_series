@@ -165,7 +165,7 @@ async function testTimeParsing(): Promise<void> {
 }
 
 // Run the test function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   testTimeParsing()
     .then(() => {
       console.log('\n✨ Time parsing test complete!');

@@ -93,7 +93,7 @@ async function debugRunner(): Promise<void> {
 }
 
 // Run the debug function if called directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   debugRunner()
     .then(() => {
       console.log('\n✨ Debug complete!');
