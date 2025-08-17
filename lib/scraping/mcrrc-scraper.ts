@@ -41,9 +41,19 @@ export class MCRRCScraper {
   private readonly userAgent = 'Mozilla/5.0 (compatible; MCRRC-Championship-Series-Bot)';
 
   constructor() {
-    // Set up axios defaults
+    // Set up axios defaults with performance optimizations
     axios.defaults.headers.common['User-Agent'] = this.userAgent;
-    axios.defaults.timeout = 30000; // 30 second timeout
+    axios.defaults.timeout = 20000; // Reduced to 20 second timeout
+    axios.defaults.headers.common['Accept'] = 'text/html,application/xhtml+xml';
+    axios.defaults.headers.common['Accept-Encoding'] = 'gzip, deflate';
+    axios.defaults.headers.common['Connection'] = 'keep-alive';
+    
+    // Enable HTTP compression for faster downloads
+    axios.defaults.decompress = true;
+    
+    // Configure for better performance
+    axios.defaults.maxRedirects = 3; // Limit redirects
+    axios.defaults.validateStatus = (status) => status < 400; // Accept more status codes
   }
 
   /**
@@ -851,13 +861,17 @@ export class MCRRCScraper {
         console.log(`📅 Updated planned race "${matchingPlannedRace.name}" status to 'scraped'`);
       }
 
-      // 2. Process runners and create series registrations (OPTIMIZED)
+      // 2. Process runners and create series registrations (SUPER OPTIMIZED)
       console.log(`👥 Processing ${scrapedRace.runners.length} runners...`);
-      const runnerProcessingResult = await this.storeRunnersDataOptimized(sql, scrapedRace.runners, seriesId);
+      
+      // Use the new optimized V2 method for better performance
+      const { MCRRCScraperOptimized } = await import('./mcrrc-scraper-optimized.js');
+      const optimizedScraper = new MCRRCScraperOptimized();
+      
+      const runnerProcessingResult = await optimizedScraper.storeRunnersDataOptimizedV2(sql, scrapedRace.runners, seriesId);
       console.log(`   ✨ Created ${runnerProcessingResult.runnersCreated} new runners, 🔄 updated ${runnerProcessingResult.runnersUpdated} existing runners`);
-      if (runnerProcessingResult.conflictsResolved > 0) {
-        console.log(`   🔄 Resolved ${runnerProcessingResult.conflictsResolved} bib conflicts in batch`);
-      }
+      console.log(`   📝 Processed ${runnerProcessingResult.registrationsProcessed} registrations`);
+      
 
       // 3. Clean up old race results if re-scraping (for data integrity)
       if (!isNewRace) {
@@ -869,15 +883,9 @@ export class MCRRCScraper {
         console.log(`   🗑️ Removed ${deletedResults.length || 0} old results`);
       }
 
-      // 4. Store new race results
-      console.log(`🏆 Processing ${scrapedRace.results.length} race results...`);
-      let resultsCreated = 0, resultsSkipped = 0;
-      for (const result of scrapedRace.results) {
-        const { created } = await this.storeResultData(sql, result, raceId, seriesId);
-        if (created) resultsCreated++;
-        else resultsSkipped++;
-      }
-      console.log(`   ✨ Created ${resultsCreated} race results, ⏭️ skipped ${resultsSkipped} (missing registrations)`);
+      // 4. Store new race results (SUPER OPTIMIZED)
+      const resultsProcessingResult = await optimizedScraper.storeRaceResultsOptimized(sql, scrapedRace.results, raceId, seriesId);
+      console.log(`   🎯 OPTIMIZED: Created ${resultsProcessingResult.created} race results, ⏭️ skipped ${resultsProcessingResult.skipped} (missing registrations)`);
       
       console.log(`🎉 Successfully processed race "${scrapedRace.name}" with ${scrapedRace.results.length} results`);
 

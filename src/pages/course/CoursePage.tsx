@@ -345,7 +345,10 @@ export function CoursePage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {records?.personalRecords.slice(0, 5).map((pr, index) => (
+                {records?.personalRecords
+                  .sort((a, b) => b.statistics.timesRun - a.statistics.timesRun)
+                  .slice(0, 5)
+                  .map((pr, index) => (
                   <div key={`${pr.runner.id}-${index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div>
                       <div className="font-medium">

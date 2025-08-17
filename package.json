@@ -32,6 +32,10 @@
     "debug:race-results": "tsx scripts/debug-race-results.ts",
     "test-scraper": "tsx lib/scraping/test-scraper.ts",
     "scrape:historical": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-championship-races.ts",
+    "scrape:historical:results": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-race-results.ts",
+    "scrape:historical:results:2023": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-race-results.ts --2023-only",
+    "scrape:historical:results:before2023": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-race-results.ts --2023-and-before",
+    "scrape:historical:results:recent": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-race-results.ts --recent",
     "test:historical:recent": "NODE_NO_WARNINGS=1 tsx scripts/test-historical-scraping-2023-2024.ts",
     "link:courses": "NODE_NO_WARNINGS=1 tsx scripts/link-races-to-courses.ts"
   },
