@@ -34,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         WHERE name = ${seriesName} AND year = ${year}
       `;
 
-      if (series.length === 0) {
+      if ((series as any[]).length === 0) {
         return res.status(404).json({
           success: false,
           error: `Series "${seriesName}" for year ${year} not found`
@@ -89,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         WHERE name = ${seriesName} AND year = ${year}
       `;
 
-      if (series.length === 0) {
+      if ((series as any[]).length === 0) {
         return res.status(404).json({
           success: false,
           error: `Series "${seriesName}" for year ${year} not found`
