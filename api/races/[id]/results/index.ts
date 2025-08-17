@@ -63,7 +63,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         gender: result.gender,
         age: result.age,
         ageGroup: result.age_group,
-        bibNumber: result.bib_number
+        bibNumber: result.bib_number,
+        club: result.club || null
       }
     }));
 

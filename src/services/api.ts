@@ -215,6 +215,7 @@ export const api = {
         age: result.runner.age,
         ageGroup: result.runner.ageGroup,
         bibNumber: result.runner.bibNumber,
+        club: result.runner.club,
       }
     }));
   },

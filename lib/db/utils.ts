@@ -296,7 +296,8 @@ export async function getRaceResults(raceId: string): Promise<any[]> {
       r.id as runner_id,
       r.first_name, 
       r.last_name, 
-      r.gender, 
+      r.gender,
+      r.club,
       sr.age_group,
       sr.age,
       sr.bib_number

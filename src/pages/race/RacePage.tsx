@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, MapPin, Trophy, Users, Loader2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Trophy, Users, Loader2, ExternalLink, Search, Check } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Select, Input } from '../../components/ui';
-import { formatDate, formatTime, formatPlace, formatRunnerName, getRunnerInitials, StyledPlace } from '../../utils';
+import { formatDate, formatTime, formatPlace, formatRunnerName, StyledPlace } from '../../utils';
 import { api, ApiError } from '../../services/api';
 import { useData } from '../../contexts/DataContext';
 import type { Race } from '../../types';
@@ -28,6 +28,7 @@ interface RaceResult {
     age: number;
     ageGroup: string;
     bibNumber: string;
+    club?: string;
   };
 }
 
@@ -255,62 +256,69 @@ export function RacePage() {
               </div>
             </div>
 
-            {/* Filter Controls */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-wrap gap-4">
-                  {/* Gender Filter */}
-                  <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                    <Button
-                      variant={filters.gender === 'all' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleGenderChange('all')}
-                      className="rounded-none border-r"
-                    >
-                      All
-                    </Button>
-                    <Button
-                      variant={filters.gender === 'M' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleGenderChange('M')}
-                      className="rounded-none border-r"
-                    >
-                      Men
-                    </Button>
-                    <Button
-                      variant={filters.gender === 'F' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => handleGenderChange('F')}
-                      className="rounded-none"
-                    >
-                      Women
-                    </Button>
-                  </div>
-
-                  {/* Age Group Filter */}
-                  <Select
-                    value={filters.ageGroup}
-                    onChange={(e) => handleAgeGroupChange(e.target.value)}
-                    className="min-w-32"
+            {/* Filter Controls - Mobile Friendly */}
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Gender Filter */}
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                  <Button
+                    variant={filters.gender === 'all' ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleGenderChange('all')}
+                    className="rounded-none border-r flex-1"
                   >
-                    <option value="overall">Overall</option>
-                    {availableAgeGroups.map(ageGroup => (
-                      <option key={ageGroup} value={ageGroup}>
-                        {ageGroup}
-                      </option>
-                    ))}
-                  </Select>
+                    All
+                  </Button>
+                  <Button
+                    variant={filters.gender === 'M' ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleGenderChange('M')}
+                    className="rounded-none border-r flex-1"
+                  >
+                    Men
+                  </Button>
+                  <Button
+                    variant={filters.gender === 'F' ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleGenderChange('F')}
+                    className="rounded-none flex-1"
+                  >
+                    Women
+                  </Button>
                 </div>
 
-                {/* Search */}
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="Search runners..."
-                    value={filters.searchText}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    className="w-48"
-                  />
-                </div>
+                {/* Age Group Filter */}
+                <Select
+                  value={filters.ageGroup}
+                  onChange={(e) => handleAgeGroupChange(e.target.value)}
+                  className="flex-1 min-w-32"
+                >
+                  <option value="overall">Overall</option>
+                  {availableAgeGroups.filter(ageGroup => ageGroup && ageGroup.trim() !== '').map(ageGroup => (
+                    <option key={ageGroup} value={ageGroup}>
+                      {ageGroup}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              
+              {/* Search Filter */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Search runners by name or bib number..."
+                  value={filters.searchText}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10"
+                />
+                {filters.searchText && (
+                  <button
+                    onClick={() => setFilters(prev => ({ ...prev, searchText: '' }))}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-primary-600 hover:text-primary-700"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -338,6 +346,7 @@ export function RacePage() {
                     <th className="text-left py-3 px-2 font-medium text-gray-900">Place</th>
                     <th className="text-left py-3 px-2 font-medium text-gray-900">Runner</th>
                     <th className="text-left py-3 px-2 font-medium text-gray-900">Bib</th>
+                    <th className="text-center py-3 px-2 font-medium text-gray-900">Club?</th>
                     <th className="text-left py-3 px-2 font-medium text-gray-900">Gender</th>
                     <th className="text-left py-3 px-2 font-medium text-gray-900">Age Group</th>
                     <th className="text-right py-3 px-2 font-medium text-gray-900">Time</th>
@@ -363,16 +372,9 @@ export function RacePage() {
                         <td className="py-4 px-2">
                           <Link
                             to={`/runner/${runner.id}`}
-                            className="flex items-center gap-3 hover:text-primary-600 transition-colors"
+                            className="font-medium text-gray-900 hover:text-primary-600 transition-colors"
                           >
-                            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-medium text-primary-700">
-                                {getRunnerInitials(runner.firstName, runner.lastName)}
-                              </span>
-                            </div>
-                            <span className="font-medium text-gray-900">
-                              {formatRunnerName(runner.firstName, runner.lastName)}
-                            </span>
+                            {formatRunnerName(runner.firstName, runner.lastName)}
                           </Link>
                         </td>
                         
@@ -380,6 +382,12 @@ export function RacePage() {
                           <Badge variant="outline" size="sm">
                             {result.bibNumber}
                           </Badge>
+                        </td>
+                        
+                        <td className="py-4 px-2 text-center">
+                          {(runner.club === 'MCRRC' || (runner.club && runner.club.includes('MCRRC'))) && (
+                            <Check className="w-4 h-4 text-green-600 mx-auto" />
+                          )}
                         </td>
                         
                         <td className="py-4 px-2">
