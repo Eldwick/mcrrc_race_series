@@ -342,7 +342,7 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
     console.log('🏃 Seeding MCRRC Championship Series races for 2025...');
     console.log('📊 Source: https://mcrrc.org/club-race-series/championship-series-cs/');
     console.log(`📅 Year: ${TARGET_YEAR}`);
-    console.log(`🎯 Series ID: ${DEFAULT_SERIES_ID}`);
+    console.log(`🎯 Target Series: MCRRC Championship Series ${TARGET_YEAR}`);
     
     if (SCRAPE_COMPLETED && !SKIP_COMPLETED) {
       console.log('🌐 Will scrape completed races after seeding planned races');
@@ -399,9 +399,11 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
     const existingSeries = await sql`
       SELECT id, name, year 
       FROM series 
-      WHERE id = ${DEFAULT_SERIES_ID}
+      WHERE name = 'MCRRC Championship Series' AND year = ${TARGET_YEAR}
     `;
 
+    let seriesId = DEFAULT_SERIES_ID;
+    
     if (existingSeries.length === 0) {
       console.log('   🆕 Creating MCRRC Championship Series record...');
       await sql`
@@ -418,20 +420,23 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
       `;
       console.log('   ✅ Series record created successfully');
     } else {
-      console.log(`   ✅ Series record already exists: "${existingSeries[0].name}" (${existingSeries[0].year})`);
+      seriesId = existingSeries[0].id;
+      console.log(`   ✅ Series record already exists: "${existingSeries[0].name}" (${existingSeries[0].year}) - ID: ${seriesId}`);
     }
+    
+    console.log(`🎯 Using Series ID: ${seriesId}`);
 
     // Get existing data
     const existingScrapedRaces = await sql`
       SELECT id, name, distance_miles, planned_race_id
       FROM races 
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
     ` as ScrapedRace[];
 
     const existingPlannedRaces = await sql`
       SELECT id, name, estimated_distance, status, series_order
       FROM planned_races 
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
     ` as PlannedRace[];
 
     console.log(`📋 Found ${existingScrapedRaces.length} scraped races and ${existingPlannedRaces.length} planned races`);
@@ -493,7 +498,7 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
             series_id, name, planned_date, year, estimated_distance, 
             location, notes, status, series_order
           ) VALUES (
-            ${DEFAULT_SERIES_ID}, ${officialRace.name}, ${estimatedDate}, ${TARGET_YEAR}, 
+            ${seriesId}, ${officialRace.name}, ${estimatedDate}, ${TARGET_YEAR}, 
             ${officialRace.distance}, ${officialRace.location}, 
             ${`Official MCRRC Championship Series race #${officialRace.order}. Already scraped as "${matchingScraped.name}".`},
             'scraped', ${officialRace.order}
@@ -530,7 +535,7 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
           series_id, name, planned_date, year, estimated_distance, 
           location, notes, status, series_order
         ) VALUES (
-          ${DEFAULT_SERIES_ID}, ${officialRace.name}, ${estimatedDate}, ${TARGET_YEAR},
+          ${seriesId}, ${officialRace.name}, ${estimatedDate}, ${TARGET_YEAR},
           ${officialRace.distance}, ${officialRace.location},
           ${`Official MCRRC Championship Series race #${officialRace.order}. Estimated ${officialRace.estimatedMonth} ${TARGET_YEAR}.`},
           'planned', ${officialRace.order}
@@ -547,7 +552,7 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
     // Calculate totals for Q value
     const updatedPlannedRaces = await sql`
       SELECT COUNT(*) as count FROM planned_races 
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
     ` as RaceCount[];
     
     const totalRaceCount = parseInt(updatedPlannedRaces[0].count);
@@ -569,7 +574,7 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
     const statusBreakdown = await sql`
       SELECT status, COUNT(*) as count 
       FROM planned_races 
-      WHERE series_id = ${DEFAULT_SERIES_ID} AND year = ${TARGET_YEAR}
+      WHERE series_id = ${seriesId} AND year = ${TARGET_YEAR}
       GROUP BY status
       ORDER BY status
     ` as RaceStatusCount[];
@@ -585,7 +590,7 @@ async function seedChampionshipSeriesRaces(): Promise<void> {
     if (SCRAPE_COMPLETED && !SKIP_COMPLETED) {
       console.log('');
       console.log('🌐 Starting to scrape completed championship series races...');
-      await scrapeCompletedRaces(DEFAULT_SERIES_ID);
+      await scrapeCompletedRaces(seriesId);
     }
 
     if (addedCount > 0 || linkedCount > 0) {
