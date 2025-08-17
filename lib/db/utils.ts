@@ -499,13 +499,12 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
     ORDER BY date
   `;
 
-  // Get total series race count (scraped + planned) for proper Q calculation
-  const [scrapedRaceCount, plannedRaceCount] = await Promise.all([
-    sql`SELECT COUNT(*) as count FROM races WHERE series_id = ${seriesId} AND year = ${year}`,
-    sql`SELECT COUNT(*) as count FROM planned_races WHERE series_id = ${seriesId} AND year = ${year}`
-  ]);
-
-  const totalSeriesRaces = parseInt((scrapedRaceCount as any[])[0].count) + parseInt((plannedRaceCount as any[])[0].count);
+  // Get total series race count for proper Q calculation
+  // Use planned_races count as the authoritative total (avoids double-counting scraped races)
+  const plannedRaceCount = await sql`SELECT COUNT(*) as count FROM planned_races WHERE series_id = ${seriesId} AND year = ${year}`;
+  
+  const totalSeriesRaces = parseInt((plannedRaceCount as any[])[0].count);
+  // Fallback to scraped race count if no planned races defined
   const effectiveRaceCount = totalSeriesRaces > 0 ? totalSeriesRaces : (races as any[]).length;
   
   if (effectiveRaceCount === 0) {
@@ -516,28 +515,29 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
   const qualifyingRaces = Math.ceil(effectiveRaceCount / 2); // Q from MCRRC R1
   
   console.log(`   ✅ Found ${(races as any[]).length} scraped races`);
-  console.log(`   📊 Total series races (scraped + planned): ${totalSeriesRaces}`);
+  console.log(`   📊 Total planned series races: ${totalSeriesRaces}`);
   console.log(`   🎯 Qualifying races needed (Q): ${qualifyingRaces}`);
   console.log(`   ⏱️  Race query time: ${Date.now() - raceQueryStart}ms`);
   console.log('');
 
-  // Step 2: Pre-calculate race rankings for ALL races (major optimization!)
-  console.log('🏃 Step 2: Pre-calculating race rankings...');
+  // Step 2: Pre-calculate race rankings for MCRRC MEMBERS ONLY (major optimization!)
+  console.log('🏃 Step 2: Pre-calculating MCRRC-only race rankings...');
   const rankingStart = Date.now();
   
   const raceRankings = new Map<string, Map<string, { overallRank: number; ageGroupRank: number }>>();
   
   for (const race of races as any[]) {
-    console.log(`   🏁 Processing rankings for "${race.name}"...`);
+    console.log(`   🏁 Processing MCRRC-only rankings for "${race.name}"...`);
     
-    // Get all race results with runner info in one optimized query
+    // Get MCRRC race results only with runner info in one optimized query
     const raceResults = await sql`
       SELECT 
         rr.series_registration_id,
-        rr.place,
+        rr.place as original_place,
         rr.is_dnf,
         rr.is_dq,
         r.gender,
+        r.club,
         sr.age_group
       FROM race_results rr
       JOIN series_registrations sr ON rr.series_registration_id = sr.id
@@ -545,14 +545,15 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
       WHERE rr.race_id = ${race.id}
         AND rr.is_dnf = false 
         AND rr.is_dq = false
+        AND (r.club = 'MCRRC' OR r.club LIKE '%MCRRC%')  -- MCRRC members only!
       ORDER BY rr.place
     ` as any[];
 
-    // Calculate overall gender rankings
+    // Calculate MCRRC-only overall gender rankings (1st MCRRC male, 2nd MCRRC male, etc.)
     const maleResults = raceResults.filter(r => r.gender === 'M');
     const femaleResults = raceResults.filter(r => r.gender === 'F');
     
-    // Calculate age group rankings by gender
+    // Calculate MCRRC-only age group rankings by gender  
     const ageGroupRankings = new Map<string, any[]>();
     for (const result of raceResults) {
       const key = `${result.gender}-${result.age_group}`;
@@ -562,13 +563,13 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
       ageGroupRankings.get(key)!.push(result);
     }
 
-    // Store rankings for this race
+    // Store MCRRC-only rankings for this race
     const raceRankingMap = new Map<string, { overallRank: number; ageGroupRank: number }>();
     
-    // Assign overall ranks
+    // Assign MCRRC-only overall ranks (1st MCRRC member gets rank 1, etc.)
     maleResults.forEach((result, index) => {
       raceRankingMap.set(result.series_registration_id, { 
-        overallRank: index + 1, 
+        overallRank: index + 1, // MCRRC-only ranking, not overall race ranking
         ageGroupRank: 0 // Will be filled below
       });
     });
@@ -577,23 +578,23 @@ export async function calculateMCRRCStandings(seriesId: string, year: number): P
       const existing = raceRankingMap.get(result.series_registration_id) || { overallRank: 0, ageGroupRank: 0 };
       raceRankingMap.set(result.series_registration_id, { 
         ...existing,
-        overallRank: index + 1
+        overallRank: index + 1 // MCRRC-only ranking, not overall race ranking
       });
     });
     
-    // Assign age group ranks
+        // Assign MCRRC-only age group ranks (1st MCRRC member in age group gets rank 1, etc.)
     for (const [key, ageGroupResults] of Array.from(ageGroupRankings.entries())) {
       ageGroupResults.forEach((result, index) => {
         const existing = raceRankingMap.get(result.series_registration_id) || { overallRank: 0, ageGroupRank: 0 };
         raceRankingMap.set(result.series_registration_id, {
           ...existing,
-          ageGroupRank: index + 1
+          ageGroupRank: index + 1 // MCRRC-only age group ranking
         });
       });
     }
-    
+
     raceRankings.set(race.id, raceRankingMap);
-    console.log(`     ✅ Ranked ${raceResults.length} results`);
+    console.log(`     ✅ Ranked ${raceResults.length} MCRRC members (excluding non-MCRRC runners)`);
   }
   
   console.log(`   ✅ Pre-calculated rankings for ${(races as any[]).length} races`);
