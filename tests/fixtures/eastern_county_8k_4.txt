@@ -1,0 +1,5 @@
+PLACE  GEN/TOT  DIV/TOT  NUM  NAME                    G   AG   HOMETOWN          CLUB           GUN TIME   PACE
+=====  =======  =======  ===  ======================  =   ==   ================  =============  =========  =====
+1      1/100    1/10     101  Jane Doe                F   32   City, ST          Team A         4:29.4     5:45
+2      1/100    1/10     202  John Smith              M   29   City, ST          Team B         25:30      5:08
+3      2/100    2/10     303  Alice Johnson           F   45   City, ST          Team C         26:10      5:16

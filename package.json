@@ -42,7 +42,9 @@
     "scrape:historical:results:before2023": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-race-results.ts --2023-and-before",
     "scrape:historical:results:recent": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-race-results.ts --recent",
     "test:historical:recent": "NODE_NO_WARNINGS=1 tsx scripts/test-historical-scraping-2023-2024.ts",
-    "link:courses": "NODE_NO_WARNINGS=1 tsx scripts/link-races-to-courses.ts"
+    "link:courses": "NODE_NO_WARNINGS=1 tsx scripts/link-races-to-courses.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
@@ -84,6 +86,8 @@
     "tsx": "^4.20.4",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
-    "vite": "^7.1.2"
+    "vite": "^7.1.2",
+    "vitest": "^2.0.5",
+    "axios-mock-adapter": "^2.1.0"
   }
 }
