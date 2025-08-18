@@ -27,10 +27,13 @@ export function RunnerPage() {
   
   // Local state for runner-specific data
   const [runnerResults, setRunnerResults] = useState<any[]>([]);
+  const [runnerDetail, setRunnerDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const runner = state.runners.find(r => r.id === id);
+  const runnerFromState = state.runners.find(r => r.id === id);
+  const runner = runnerFromState || runnerDetail;
+  const isLoading = state.loading || loading;
   const runnerStanding = state.standings.find(s => s.runnerId === id && s.year === state.selectedYear);
 
   // Load runner data and results
@@ -42,6 +45,16 @@ export function RunnerPage() {
         setLoading(true);
         setError(null);
         
+        // Load runner details if not in global state (pagination may exclude this runner)
+        if (!runnerFromState) {
+          try {
+            const r = await api.getRunner(id);
+            setRunnerDetail(r as any);
+          } catch (e) {
+            // Ignore; error will be shown by generic handler
+          }
+        }
+
         // Load runner results
         const resultsResponse = await api.getRunnerResults(id, state.selectedYear);
         
@@ -57,30 +70,8 @@ export function RunnerPage() {
     loadRunnerData();
   }, [id, state.selectedYear]);
 
-  if (!runner) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link to="/leaderboard">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Leaderboard
-            </Button>
-          </Link>
-        </div>
-        
-        <Card>
-          <CardContent className="text-center py-12">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Runner Not Found</h2>
-            <p className="text-gray-600">The runner you're looking for doesn't exist or has been removed.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Loading state
-  if (loading) {
+  // Loading state (consider both global and local)
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -127,6 +118,29 @@ export function RunnerPage() {
     );
   }
 
+  // Not found (only after data finished loading)
+  if (!runner) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Link to="/leaderboard">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Leaderboard
+            </Button>
+          </Link>
+        </div>
+        
+        <Card>
+          <CardContent className="text-center py-12">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Runner Not Found</h2>
+            <p className="text-gray-600">The runner you're looking for doesn't exist or has been removed.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -155,9 +169,9 @@ export function RunnerPage() {
               </h1>
               
               <div className="flex flex-wrap items-center gap-4 mb-4">
-                <Badge variant="outline">Bib #{runner.bibNumber}</Badge>
+                {runner.bibNumber && <Badge variant="outline">Bib #{runner.bibNumber}</Badge>}
                 <Badge variant="secondary">{runner.gender}</Badge>
-                <Badge variant="secondary">{runner.ageGroup}</Badge>
+                {runner.ageGroup && <Badge variant="secondary">{runner.ageGroup}</Badge>}
                 {runner.club && <Badge variant="outline">{runner.club}</Badge>}
               </div>
 

@@ -60,13 +60,20 @@ function createSqlRecorder(options?: { plannedName?: string; existingRace?: { id
       return Array.from(state.registrations.entries()).map(([bib, id]) => ({ bib_number: bib, id }));
     }
 
-    // Runner exists lookup
-    if (text.includes('SELECT id FROM runners') && text.includes('WHERE first_name')) {
-      // Simulate found runner after creation
-      const firstName = values[0];
-      const lastName = values[1];
-      const birthYear = values[2];
-      return [{ id: `runner-${firstName}-${lastName}-${birthYear}`, first_name: firstName, last_name: lastName, birth_year: birthYear }];
+    // Runner exists lookup (supports legacy by birth_year and new name-only, case-insensitive)
+    if (text.includes('SELECT id FROM runners') && text.includes('WHERE')) {
+      const lowerNameLookup = text.includes('LOWER(first_name)') && text.includes('LOWER(last_name)');
+      if (lowerNameLookup) {
+        const firstName = values[0];
+        const lastName = values[1];
+        return [{ id: `runner-${firstName}-${lastName}`, first_name: firstName, last_name: lastName, birth_year: 0 }];
+      }
+      if (text.includes('WHERE first_name') && text.includes('birth_year')) {
+        const firstName = values[0];
+        const lastName = values[1];
+        const birthYear = values[2];
+        return [{ id: `runner-${firstName}-${lastName}-${birthYear}`, first_name: firstName, last_name: lastName, birth_year: birthYear }];
+      }
     }
 
     // Insert runner

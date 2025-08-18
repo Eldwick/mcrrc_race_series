@@ -68,12 +68,21 @@ export class MCRRCScraper {
   }
 
   /**
-   * Generate a deterministic fallback bib from a runner's name.
-   * Format: FIRST-LAST (uppercase), sanitized and truncated to 10 chars.
+   * Generate a deterministic fallback bib from a runner's name using a hash to avoid collisions.
+   * Format: <INITIALS><BASE36_HASH> (uppercase), sanitized and truncated to 10 chars.
    */
   private bibFromName(firstName?: string, lastName?: string): string {
-    const base = `${(firstName || '').toUpperCase()}-${(lastName || '').toUpperCase()}`.replace(/\s+/g, '-');
-    return this.sanitizeBibNumber(base || 'UNKNOWN');
+    const key = `${(firstName || '').trim().toLowerCase()}|${(lastName || '').trim().toLowerCase()}`;
+    // djb2 hash (XOR variant) → unsigned 32-bit
+    let hash = 5381;
+    for (let i = 0; i < key.length; i++) {
+      hash = ((hash << 5) + hash) ^ key.charCodeAt(i);
+    }
+    const unsigned = hash >>> 0;
+    const base36 = unsigned.toString(36).toUpperCase();
+    const initials = `${(firstName?.[0] || 'X')}${(lastName?.[0] || 'X')}`.toUpperCase().replace(/[^A-Z]/g, 'X');
+    const candidate = `${initials}${base36}`.replace(/[^A-Z0-9]/g, '');
+    return this.sanitizeBibNumber(candidate || 'NN00000000');
   }
 
   /**
@@ -885,6 +894,15 @@ export class MCRRCScraper {
         // Skip empty lines
         if (!trimmedLine) continue;
         
+        // If we encounter a new distance heading (e.g., "2.78K", "2K", "1 Mile")
+        // after having parsed some results, stop to avoid pulling shorter race results.
+        // Detect distance tokens anywhere in the line (e.g., "Piece of Cake 2.78K").
+        const distanceTokenRegex = /\b\d+(?:[.,]\d+)?\s*(?:k|km|mile|mi)\b/i;
+        const looksLikeDistanceHeading = distanceTokenRegex.test(trimmedLine);
+        if (resultCount > 0 && looksLikeDistanceHeading) {
+          break;
+        }
+
         // Stop at footer content or end markers (but do NOT stop on separator lines within the results)
         if (trimmedLine.includes('Stay Informed') || trimmedLine.includes('Email:') || 
             trimmedLine.includes('Copyright') || trimmedLine.includes('Terms & Conditions') ||
@@ -1534,10 +1552,10 @@ export class MCRRCScraper {
     // Calculate age group - age is now guaranteed to exist
     const ageGroup = this.getAgeGroup(runner.age);
 
-    // Check if runner already exists
+    // Check if runner already exists (link across years by name only, case-insensitive)
     const existingRunner = await sql`
       SELECT id FROM runners 
-      WHERE first_name = ${runner.firstName} AND last_name = ${runner.lastName} AND birth_year = ${birthYear}
+      WHERE LOWER(first_name) = LOWER(${runner.firstName}) AND LOWER(last_name) = LOWER(${runner.lastName})
     ` as any[];
 
     let runnerId: string;
@@ -1683,11 +1701,11 @@ export class MCRRCScraper {
     });
 
     // OPTIMIZATION 2: Process all runners and cache runner IDs
-    const runnerCache = new Map<string, string>(); // fullName -> runnerId
+    const runnerCache = new Map<string, string>(); // fullName (lowercased) -> runnerId
     
     // Pre-process all runners to get/create runner IDs and prepare for bulk operations
     for (const runner of runners) {
-      const fullName = `${runner.firstName}|${runner.lastName}`;
+      const fullName = `${runner.firstName}|${runner.lastName}`.toLowerCase();
       let runnerId = runnerCache.get(fullName);
       
       if (!runnerId) {
@@ -1698,7 +1716,7 @@ export class MCRRCScraper {
         // Check if runner exists
         const existingRunner = await sql`
           SELECT id FROM runners 
-          WHERE first_name = ${runner.firstName} AND last_name = ${runner.lastName} AND birth_year = ${birthYear}
+          WHERE LOWER(first_name) = LOWER(${runner.firstName}) AND LOWER(last_name) = LOWER(${runner.lastName})
         ` as any[];
 
         if (existingRunner.length > 0) {
@@ -1752,7 +1770,7 @@ export class MCRRCScraper {
 
     // OPTIMIZATION 4: Bulk upsert all registrations
     for (const runner of runners) {
-      const fullName = `${runner.firstName}|${runner.lastName}`;
+      const fullName = `${runner.firstName}|${runner.lastName}`.toLowerCase();
       const runnerId = runnerCache.get(fullName);
       if (!runnerId) {
         console.error(`❌ Runner ID not found in cache for ${runner.firstName} ${runner.lastName}`);

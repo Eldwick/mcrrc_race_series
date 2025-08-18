@@ -62,24 +62,72 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
 // API functions
 export const api = {
   // Get all active runners
-  async getRunners(): Promise<Runner[]> {
-    const response = await apiCall<{ data: any[]; count: number }>('/runners');
+  async getRunners(params?: { q?: string; page?: number; limit?: number; sort?: 'name_asc' | 'name_desc' }): Promise<Runner[]> {
+    const usp = new URLSearchParams();
+    if (params?.q) usp.set('q', params.q);
+    if (params?.page) usp.set('page', String(params.page));
+    if (params?.limit) usp.set('limit', String(params.limit));
+    if (params?.sort) usp.set('sort', params.sort);
+    const query = usp.toString();
+    const response = await apiCall<{ data: any[]; count: number; total?: number; page?: number; limit?: number }>(`/runners${query ? `?${query}` : ''}`);
     
     // Transform API response to frontend types
     return response.data.map((runner: any) => ({
       id: runner.id,
-      bibNumber: runner.bibNumber || runner.bib_number || '',
-      firstName: runner.firstName || runner.first_name,
-      lastName: runner.lastName || runner.last_name,
+      // Map both camelCase and snake_case from API
+      bibNumber: runner.bibNumber ?? runner.bib_number ?? '',
+      firstName: runner.firstName ?? runner.first_name,
+      lastName: runner.lastName ?? runner.last_name,
       gender: runner.gender,
-      age: runner.age,
-      ageGroup: runner.ageGroup || runner.age_group || '',
+      age: runner.age ?? runner.registration_age ?? runner.series_age,
+      ageGroup: runner.ageGroup ?? runner.age_group ?? '',
       club: runner.club,
       isActive: runner.isActive ?? runner.is_active ?? true,
       createdAt: runner.createdAt || runner.created_at,
       updatedAt: runner.updatedAt || runner.updated_at,
-      raceCount: runner.raceCount || 0, // Race participation count
+      raceCount: runner.raceCount ?? runner.race_count ?? 0, // Race participation count
     }));
+  },
+
+  // Paginated runner search for the runners list page
+  async getRunnersPaginated(params?: { q?: string; page?: number; limit?: number; sort?: 'name_asc' | 'name_desc' }): Promise<{
+    runners: Runner[];
+    total: number;
+    count: number;
+    page: number;
+    limit: number;
+  }> {
+    const usp = new URLSearchParams();
+    if (params?.q) usp.set('q', params.q);
+    if (params?.page) usp.set('page', String(params.page));
+    if (params?.limit) usp.set('limit', String(params.limit));
+    if (params?.sort) usp.set('sort', params.sort);
+    const query = usp.toString();
+    const fullUrl = `/runners${query ? `?${query}` : ''}`;
+    const response = await apiCall<{ data: any[]; count: number; total: number; page: number; limit: number }>(fullUrl);
+
+    const runners: Runner[] = response.data.map((runner: any) => ({
+      id: runner.id,
+      bibNumber: runner.bibNumber ?? runner.bib_number ?? '',
+      firstName: runner.firstName ?? runner.first_name,
+      lastName: runner.lastName ?? runner.last_name,
+      gender: runner.gender,
+      age: runner.age ?? runner.registration_age ?? runner.series_age,
+      ageGroup: runner.ageGroup ?? runner.age_group ?? '',
+      club: runner.club,
+      isActive: runner.isActive ?? runner.is_active ?? true,
+      createdAt: runner.createdAt || runner.created_at,
+      updatedAt: runner.updatedAt || runner.updated_at,
+      raceCount: runner.raceCount ?? runner.race_count ?? 0,
+    }));
+
+    return {
+      runners,
+      total: response.total ?? runners.length,
+      count: response.count ?? runners.length,
+      page: response.page ?? params?.page ?? 1,
+      limit: response.limit ?? params?.limit ?? 50,
+    };
   },
 
   // Get a specific runner by ID
@@ -89,17 +137,17 @@ export const api = {
     
     return {
       id: runner.id,
-      bibNumber: runner.bibNumber || runner.bib_number || '',
-      firstName: runner.firstName || runner.first_name,
-      lastName: runner.lastName || runner.last_name,
+      bibNumber: runner.bibNumber ?? runner.bib_number ?? '',
+      firstName: runner.firstName ?? runner.first_name,
+      lastName: runner.lastName ?? runner.last_name,
       gender: runner.gender,
-      age: runner.age,
-      ageGroup: runner.ageGroup || runner.age_group || '',
+      age: runner.age ?? runner.registration_age ?? runner.series_age,
+      ageGroup: runner.ageGroup ?? runner.age_group ?? '',
       club: runner.club,
       isActive: runner.isActive ?? runner.is_active ?? true,
       createdAt: runner.createdAt || runner.created_at,
       updatedAt: runner.updatedAt || runner.updated_at,
-      raceCount: runner.raceCount || 0, // Race participation count
+      raceCount: runner.raceCount ?? runner.race_count ?? 0, // Race participation count
     };
   },
 

@@ -41,10 +41,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COUNT(DISTINCT r.id) as total_races,
           MIN(r.year) as first_year,
           MAX(r.year) as last_year,
-          COUNT(DISTINCT rr.id) as total_participants
+          COUNT(rr.id) as total_participants
         FROM race_courses rc
         LEFT JOIN races r ON rc.id = r.race_course_id
-        LEFT JOIN race_results rr ON r.id = rr.race_id
+        LEFT JOIN race_results rr ON r.id = rr.race_id AND rr.is_dnf = false AND rr.is_dq = false
         WHERE rc.is_active = true
         GROUP BY rc.id, rc.name, rc.short_name, rc.location, rc.typical_distance, 
                  rc.course_type, rc.established_year, rc.description, rc.is_active, 

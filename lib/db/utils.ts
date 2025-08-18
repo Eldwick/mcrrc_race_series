@@ -98,6 +98,65 @@ export async function getAllRunners(): Promise<any[]> {
   return result as any[];
 }
 
+// Paginated runners (search across all years, alphabetical by default)
+export async function getRunnersPaginated(options?: {
+  search?: string;
+  page?: number;
+  limit?: number;
+  sort?: 'name_asc' | 'name_desc';
+}): Promise<{ rows: any[]; total: number; page: number; limit: number }> {
+  const sql = getSql();
+  const search = options?.search?.trim() || '';
+  const page = Math.max(1, options?.page ?? 1);
+  const limit = Math.min(200, Math.max(1, options?.limit ?? 50));
+  const offset = (page - 1) * limit;
+  const sort = options?.sort === 'name_desc' ? 'DESC' : 'ASC';
+
+  // Total count (active runners matching search)
+  const countRows = await sql`
+    SELECT COUNT(*) AS total
+    FROM runners r
+    WHERE (r.is_active IS NULL OR r.is_active = true)
+      ${search ? sql`AND (LOWER(r.first_name || ' ' || r.last_name) LIKE LOWER(${`%${search}%`}))` : sql``}
+  ` as Array<{ total: string }>;
+  const total = parseInt(countRows[0]?.total || '0', 10);
+
+  // Latest registration per runner for bib/age info; race counts across all years
+  const rows = await sql`
+    WITH latest_reg AS (
+      SELECT DISTINCT ON (sr.runner_id)
+        sr.runner_id,
+        sr.bib_number,
+        sr.age,
+        sr.age_group,
+        sr.created_at
+      FROM series_registrations sr
+      ORDER BY sr.runner_id, sr.created_at DESC
+    ),
+    race_counts AS (
+      SELECT sr2.runner_id, COUNT(DISTINCT rr.race_id) AS race_count
+      FROM series_registrations sr2
+      JOIN race_results rr ON rr.series_registration_id = sr2.id
+      GROUP BY sr2.runner_id
+    )
+    SELECT 
+      r.*, 
+      lr.bib_number,
+      lr.age,
+      lr.age_group,
+      COALESCE(rc.race_count, 0) AS race_count
+    FROM runners r
+    LEFT JOIN latest_reg lr ON lr.runner_id = r.id
+    LEFT JOIN race_counts rc ON rc.runner_id = r.id
+    WHERE (r.is_active IS NULL OR r.is_active = true)
+      ${search ? sql`AND (LOWER(r.first_name || ' ' || r.last_name) LIKE LOWER(${`%${search}%`}))` : sql``}
+    ORDER BY r.last_name ${sql.unsafe(sort)}, r.first_name ${sql.unsafe(sort)}, r.id
+    LIMIT ${limit} OFFSET ${offset}
+  ` as any[];
+
+  return { rows, total, page, limit };
+}
+
 export async function getRunnerById(id: string): Promise<any | null> {
   const sql = getSql();
   const rows = await sql`

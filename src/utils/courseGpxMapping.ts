@@ -5,15 +5,15 @@
 export const COURSE_GPX_MAPPING: Record<string, string> = {
   'Eastern County 8k': 'eastern_county_8k.gpx',
   'Eastern County': 'eastern_county_8k.gpx',
-  // Turkey Burnoff
   'Turkey Burnoff 10m': 'turkey_burnoff_10m.gpx',
   'Turkey Burnoff 10miler': 'turkey_burnoff_10m.gpx',
   'Jingle Bell Jog 8k': 'jingle_bell_jog.gpx',
   'Capital for a Day 5k': 'capital_for_a_day.gpx',
   'Piece of Cake 10k': 'piece_of_cake.gpx',
-  // Add more mappings as you add GPX files
-  // 'Piece of Cake 10k': 'piece_of_cake_10k.gpx',
-  // 'Riley\'s Rumble Half Marathon': 'rileys_rumble_half.gpx',
+  'Riley\'s Rumble Half Marathon': 'rileys_rumble.gpx',
+  'Country Road 5k': 'country_road.gpx',
+  'Matthew Henson Trail 5k': 'matthew_henson.gpx',
+  'Memorial Day 4 Miler': 'memorial_day.gpx',
 };
 
 /**

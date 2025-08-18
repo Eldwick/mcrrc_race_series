@@ -103,12 +103,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ` as any[];
 
     // Also get personal records (PRs) summary
+    // Group by runner name (case-insensitive) to unify the same runner across years/IDs
     const personalRecords = await sql`
       WITH runner_course_prs AS (
         SELECT 
-          runners.id as runner_id,
-          runners.first_name,
-          runners.last_name,
+          MIN(runners.id::text) as runner_id,
+          MIN(runners.first_name) as first_name,
+          MIN(runners.last_name) as last_name,
           runners.gender,
           COUNT(*) as times_run,
           MIN(rr.gun_time) as personal_best,
@@ -122,8 +123,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         JOIN runners ON sr.runner_id = runners.id
         WHERE r.race_course_id = ${courseId}
           AND rr.is_dnf = false AND rr.is_dq = false
-        GROUP BY runners.id, runners.first_name, runners.last_name, runners.gender
-        HAVING COUNT(*) >= 2  -- Only runners who have run the course multiple times
+        GROUP BY LOWER(runners.first_name), LOWER(runners.last_name), runners.gender
+        HAVING COUNT(*) >= 2
       )
       SELECT *,
         personal_best::text as personal_best_text,
@@ -131,8 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         EXTRACT(EPOCH FROM personal_best) as pb_seconds,
         EXTRACT(EPOCH FROM personal_worst) as pw_seconds
       FROM runner_course_prs
-      ORDER BY personal_best
-      LIMIT 50
+      ORDER BY times_run DESC, personal_best ASC
     ` as any[];
 
     const transformedRecords = records.map((record: any) => ({

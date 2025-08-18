@@ -114,15 +114,6 @@ export function RacePage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link to="/races">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Races
-            </Button>
-          </Link>
-        </div>
-        
         <Card>
           <CardContent className="text-center py-12">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />

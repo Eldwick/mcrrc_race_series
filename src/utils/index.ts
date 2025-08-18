@@ -189,8 +189,13 @@ export function formatRunnerName(firstName: string, lastName: string): string {
 /**
  * Generate runner initials
  */
-export function getRunnerInitials(firstName: string, lastName: string): string {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+export function getRunnerInitials(firstName?: string | null, lastName?: string | null): string {
+  const safeFirst = typeof firstName === 'string' ? firstName.trim() : '';
+  const safeLast = typeof lastName === 'string' ? lastName.trim() : '';
+  const fi = safeFirst ? safeFirst.charAt(0) : '';
+  const li = safeLast ? safeLast.charAt(0) : '';
+  const initials = `${fi}${li}`.toUpperCase();
+  return initials || '?';
 }
 
 /**

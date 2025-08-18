@@ -1,26 +1,107 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Search, Calendar } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardContent, Input, Select, Badge } from '../../components/ui';
 import { formatRunnerName, getRunnerInitials, getRankIcon } from '../../utils';
+import { api } from '../../services/api';
 
 export function RunnersListPage() {
-  const { state, filteredRunners, availableAgeGroups } = useData();
+  const { state, availableAgeGroups } = useData();
   const [searchText, setSearchText] = useState('');
+  const [debouncedSearchText, setDebouncedSearchText] = useState('');
   const [genderFilter, setGenderFilter] = useState<'all' | 'M' | 'F'>('all');
   const [ageGroupFilter, setAgeGroupFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [runners, setRunners] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [limit, setLimit] = useState(50);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter runners based on local state
-  const displayRunners = filteredRunners.filter(runner => {
-    const matchesSearch = searchText === '' || 
-      `${runner.firstName} ${runner.lastName}`.toLowerCase().includes(searchText.toLowerCase()) ||
-      runner.bibNumber.includes(searchText);
-    
+  // Autofocus search input
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  // Debounce search text (100ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchText(searchText);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  // Reset page to 1 when debounced search text changes
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchText]);
+
+  // Fetch function with abort controller support
+  const fetchRunners = useCallback(async (searchQuery: string, pageNum: number) => {
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Don't search for empty or very short queries
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+      setRunners([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Create new abort controller for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      const { runners: items, total, count, page: currentPage, limit: apiLimit } = await api.getRunnersPaginated({ 
+        q: searchQuery, 
+        page: pageNum, 
+        limit, 
+        sort: 'name_asc' 
+      });
+
+      // Only update state if request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setRunners(items);
+        setTotal(total ?? count ?? items.length);
+        setLimit(apiLimit);
+        if (currentPage !== pageNum) setPage(currentPage);
+      }
+    } catch (err) {
+      // Don't show error if request was aborted (user typed more)
+      if (!abortControllerRef.current?.signal.aborted) {
+        console.error('Failed to load runners:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load runners');
+      }
+    } finally {
+      if (!abortControllerRef.current?.signal.aborted) {
+        setLoading(false);
+      }
+    }
+  }, [limit]);
+
+  // Load paginated runners when debounced search/page changes
+  useEffect(() => {
+    fetchRunners(debouncedSearchText, page);
+  }, [debouncedSearchText, page, fetchRunners]);
+
+  // Filter runners based on local gender/age filters only (search is server-side now)
+  const displayRunners = runners.filter(runner => {
     const matchesGender = genderFilter === 'all' || runner.gender === genderFilter;
     const matchesAgeGroup = ageGroupFilter === '' || runner.ageGroup === ageGroupFilter;
 
-    return matchesSearch && matchesGender && matchesAgeGroup;
+    return matchesGender && matchesAgeGroup;
   });
 
   // Get runner's current standing
@@ -38,9 +119,7 @@ export function RunnersListPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Runners</h1>
-        <p className="text-gray-600 mt-1">
-          All active runners in the {state.selectedYear} series
-        </p>
+        <p className="text-gray-600 mt-1">Search any runner across all years</p>
       </div>
 
       {/* Filters */}
@@ -51,7 +130,8 @@ export function RunnersListPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
-                placeholder="Search runners..."
+                ref={searchRef}
+                placeholder="Search runners (min 2 characters)..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 className="pl-10"
@@ -98,46 +178,15 @@ export function RunnersListPage() {
         </CardContent>
       </Card>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {displayRunners.length}
-              </h3>
-              <p className="text-sm text-gray-600">Total Runners</p>
-            </div>
-            <Users className="w-8 h-8 text-primary-600" />
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {displayRunners.filter(r => r.gender === 'M').length}
-              </h3>
-              <p className="text-sm text-gray-600">Men</p>
-            </div>
-            <Users className="w-8 h-8 text-blue-600" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">
-                {displayRunners.filter(r => r.gender === 'F').length}
-              </h3>
-              <p className="text-sm text-gray-600">Women</p>
-            </div>
-            <Users className="w-8 h-8 text-pink-600" />
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Runners Grid */}
+      {loading && (
+        <Card><CardContent className="p-6">Loading…</CardContent></Card>
+      )}
+      {error && (
+        <Card><CardContent className="p-6 text-red-600">{error}</CardContent></Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {displayRunners.map((runner) => {
           const standing = getRunnerStanding(runner.id);
@@ -231,7 +280,41 @@ export function RunnersListPage() {
         })}
       </div>
 
-      {displayRunners.length === 0 && (
+      {/* Pagination */}
+      {total > 0 && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            className="btn btn-secondary"
+            disabled={page <= 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="text-sm text-gray-600">Page {page} of {Math.max(1, Math.ceil(total / limit))}</span>
+          <button
+            className="btn btn-secondary"
+            disabled={Math.ceil(total / limit) <= page || total === 0}
+            onClick={() => setPage(p => p + 1)}
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Show appropriate message based on search state */}
+      {searchText.trim() !== '' && searchText.trim().length < 2 && !loading && (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Keep typing...</h3>
+            <p className="text-gray-600">
+              Enter at least 2 characters to search for runners.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {debouncedSearchText.trim().length >= 2 && !loading && displayRunners.length === 0 && (
         <Card>
           <CardContent className="text-center py-12">
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />

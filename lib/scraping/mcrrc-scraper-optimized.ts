@@ -321,19 +321,20 @@ export class MCRRCScraperOptimized {
     const runnerKeys = [...new Set(runners.map(r => this.getRunnerKey(r)))];
     
     // For compatibility with Neon SQL, run lookups in parallel with capped concurrency
-    const existingRunners: Array<{id: string, first_name: string, last_name: string, birth_year: number}> = [];
+    const existingRunners: Array<{id: string, first_name: string, last_name: string}> = [];
     const CONCURRENCY = 10;
     let idx = 0;
     while (idx < runnerKeys.length) {
       const slice = runnerKeys.slice(idx, idx + CONCURRENCY);
       const results = await Promise.all(slice.map(async (key) => {
-        const [firstName, lastName, birthYear] = key.split('|');
+        const [firstName, lastName] = key.split('|');
         const rows = await sql`
-          SELECT id, first_name, last_name, birth_year 
+          SELECT id, first_name, last_name
           FROM runners 
-          WHERE first_name = ${firstName} AND last_name = ${lastName} AND birth_year = ${parseInt(birthYear)}
+          WHERE LOWER(first_name) = LOWER(${firstName}) AND LOWER(last_name) = LOWER(${lastName})
+          LIMIT 1
         `;
-        return rows as Array<{id: string, first_name: string, last_name: string, birth_year: number}>;
+        return rows as Array<{id: string, first_name: string, last_name: string}>;
       }));
       for (const group of results) {
         if (group && group.length > 0) existingRunners.push(...group);
@@ -344,7 +345,7 @@ export class MCRRCScraperOptimized {
     // Build map
     const map = new Map<string, string>();
     existingRunners.forEach(runner => {
-      const key = `${runner.first_name}|${runner.last_name}|${runner.birth_year}`;
+      const key = `${runner.first_name.toLowerCase()}|${runner.last_name.toLowerCase()}`;
       map.set(key, runner.id);
     });
 
@@ -355,9 +356,7 @@ export class MCRRCScraperOptimized {
    * Generate unique key for runner lookup
    */
   private getRunnerKey(runner: {firstName: string, lastName: string, age: number}): string {
-    const currentYear = new Date().getFullYear();
-    const birthYear = currentYear - runner.age;
-    return `${runner.firstName}|${runner.lastName}|${birthYear}`;
+    return `${runner.firstName.toLowerCase()}|${runner.lastName.toLowerCase()}`;
   }
 
   /**

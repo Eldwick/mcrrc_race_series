@@ -118,6 +118,60 @@ describe('MCRRCScraper.parse', () => {
     expect(first.chipTime).toBe('00:55:25');
     expect(first.pacePerMile).toBe('00:05:33');
   });
+
+  it('parses Piece of Cake 10K plain text and excludes 2.78K section', async () => {
+    const url = 'https://mcrrc.org/race-result/piece-of-cake-10k-cs-4/';
+    const html = fs.readFileSync(path.resolve(__dirname, '../fixtures/piece_of_cake_10k_cs_4.html'), 'utf8');
+    mock.onGet(url).reply(200, html);
+
+    const scraper = new MCRRCScraper();
+    const race = await scraper.scrapeRace(url);
+
+    expect(race.name).toContain('Piece of Cake 10K');
+    const first = race.results.find(r => r.place === 1)!;
+    expect(first.gunTime).toBe('00:34:24');
+    // Ensure no 2.78K time made it in
+    const hasShort = race.results.some(r => r.gunTime === '00:12:10');
+    expect(hasShort).toBe(false);
+  });
+
+  it('uses hashed name fallback bibs to avoid collisions when bib is missing', async () => {
+    const url = 'https://mcrrc.org/race-result/jingle-bell-jog-8k-4/';
+    const html = fs.readFileSync(path.resolve(__dirname, '../fixtures/jingle_bell_jog_8k_4.html'), 'utf8');
+    mock.onGet(url).reply(200, html);
+
+    const scraper = new MCRRCScraper();
+    const race = await scraper.scrapeRace(url);
+
+    // Reproduce the scraper's bibFromName hashing here for determinism
+    const bibFromName = (first = '', last = '') => {
+      const key = `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+      let hash = 5381;
+      for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) + hash) ^ key.charCodeAt(i);
+      }
+      const unsigned = hash >>> 0;
+      const base36 = unsigned.toString(36).toUpperCase();
+      const initials = `${(first[0] || 'X')}${(last[0] || 'X')}`.toUpperCase().replace(/[^A-Z]/g, 'X');
+      const candidate = `${initials}${base36}`.replace(/[^A-Z0-9]/g, '');
+      const cleaned = candidate.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+      return cleaned.slice(0, 10);
+    };
+
+    const aviDahanExpected = bibFromName('Avi', 'Dahan');
+    const danielMooneyExpected = bibFromName('Daniel', 'Mooney');
+
+    const firstResult = race.results.find(r => r.place === 1)!; // Avi Dahan
+    const secondResult = race.results.find(r => r.place === 2)!; // Daniel Mooney
+
+    expect(firstResult.bibNumber).toBe(aviDahanExpected);
+    expect(secondResult.bibNumber).toBe(danielMooneyExpected);
+    expect(firstResult.bibNumber).not.toBe(secondResult.bibNumber);
+    expect(firstResult.bibNumber.length).toBeLessThanOrEqual(10);
+    expect(secondResult.bibNumber.length).toBeLessThanOrEqual(10);
+    expect(/^[A-Z0-9]+$/.test(firstResult.bibNumber)).toBe(true);
+    expect(/^[A-Z0-9]+$/.test(secondResult.bibNumber)).toBe(true);
+  });
 });
 
 
