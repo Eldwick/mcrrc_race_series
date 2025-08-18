@@ -87,6 +87,11 @@ async function main() {
     // Re-scrape and store from the URL
     console.log(`   📄 ${year}: Scraping ${url}`);
     const scraped = await scraper.scrapeRace(url);
+    // Ensure the race date reflects the known year from the mapping if page parsing fails/mismatches
+    const scrapedYear = scraped.date ? new Date(scraped.date).getFullYear() : NaN;
+    if (!scraped.date || Number.isNaN(scrapedYear) || scrapedYear !== year) {
+      scraped.date = `${year}-01-01`;
+    }
     await scraper.storeRaceData(scraped, seriesId);
     console.log(`   ✅ Stored ${scraped.results.length} results for ${year}`);
   }

@@ -68,6 +68,15 @@ export class MCRRCScraper {
   }
 
   /**
+   * Generate a deterministic fallback bib from a runner's name.
+   * Format: FIRST-LAST (uppercase), sanitized and truncated to 10 chars.
+   */
+  private bibFromName(firstName?: string, lastName?: string): string {
+    const base = `${(firstName || '').toUpperCase()}-${(lastName || '').toUpperCase()}`.replace(/\s+/g, '-');
+    return this.sanitizeBibNumber(base || 'UNKNOWN');
+  }
+
+  /**
    * Scrape a single race result page
    */
   async scrapeRace(url: string): Promise<ScrapedRace> {
@@ -367,8 +376,33 @@ export class MCRRCScraper {
       columns.age = separatorSections[6];
       columns.hometown = separatorSections[7];
       columns.club = separatorSections[8];
-      columns.gunTime = separatorSections[9];
-      columns.pace = separatorSections[10];
+
+      // Time columns: derive from header keywords to avoid mislabeling split/gun/net/pace
+      const headerLower = headerLine.toLowerCase();
+      const findSectionIndexFor = (keyword: string): number | null => {
+        const pos = headerLower.indexOf(keyword);
+        if (pos === -1) return null;
+        const idx = separatorSections.findIndex(sec => pos >= sec.start && pos <= sec.end);
+        return idx >= 0 ? idx : null;
+      };
+
+      const idxSplit = findSectionIndexFor('spl'); // 5mi Spl
+      const idxGun = findSectionIndexFor('gun');
+      const idxNet = findSectionIndexFor('net');
+      const idxPace = findSectionIndexFor('pace');
+
+      if (idxGun !== null) columns.gunTime = separatorSections[idxGun];
+      if (idxNet !== null) (columns as any).netTime = separatorSections[idxNet];
+      if (idxPace !== null) columns.pace = separatorSections[idxPace];
+      // We don't store split, but we intentionally do not map it as gun
+      if (!columns.gunTime && separatorSections.length > 9) {
+        // Fallback: assume third-from-last is gun when multiple time columns exist
+        const lastIdx = separatorSections.length - 1;
+        if (lastIdx - 2 > 8) columns.gunTime = separatorSections[lastIdx - 2];
+      }
+      if (!columns.pace && separatorSections.length > 10) {
+        columns.pace = separatorSections[separatorSections.length - 1];
+      }
     } else {
       console.warn('Unexpected number of separator sections:', separatorSections.length);
       // Fallback to header-based detection
@@ -472,13 +506,8 @@ export class MCRRCScraper {
       const place = parseInt(placeStr) || 0;
       if (!place) return { result: null, runner: null };
       
-      // Extract bib number (allow missing by assigning a unique placeholder based on place)
-      let bibNumber = extractField('bibNumber');
-      if (!bibNumber) {
-        console.warn('No bib number found in fixed-width line');
-        bibNumber = `U-${place}`;
-      }
-      bibNumber = this.sanitizeBibNumber(bibNumber);
+      // Extract bib number (may be missing in legacy formats)
+      let bibNumberRaw = extractField('bibNumber');
       
       // Extract name with cleanup for stray numeric tokens
       const fullName = extractField('name');
@@ -489,6 +518,9 @@ export class MCRRCScraper {
       }
       const firstName = tokens[0] || '';
       const lastName = tokens.slice(1).join(' ') || '';
+
+      // Finalize bib number (fallback to encoded name if missing)
+      let bibNumber = bibNumberRaw ? this.sanitizeBibNumber(bibNumberRaw) : this.bibFromName(firstName, lastName);
       
 
       
@@ -509,7 +541,7 @@ export class MCRRCScraper {
       const age = parseInt(ageStr) || 25;
       
       // Extract time (allow missing -> mark as DNF)
-      const timeStrRaw = extractField('gunTime') || extractField('time');
+      const timeStrRaw = extractField('gunTime');
       const hasTime = !!timeStrRaw && /\d{1,2}:\d{2}(:\d{2})?/.test(timeStrRaw);
       
       // Extract places from ratio fields
@@ -532,14 +564,16 @@ export class MCRRCScraper {
       const hometown = extractField('hometown');
       const club = extractField('club');
 
+      const netTimeStr = extractField('netTime');
+
       const result: ScrapedRaceResult = {
         bibNumber: bibNumber,
         place: place,
         placeGender: genderPlace,
         placeAgeGroup: ageGroupPlace,
         gunTime: hasTime ? this.normalizeTime(timeStrRaw) : '00:00:00',
-        chipTime: undefined,
-        pacePerMile: extractField('pace') || '',
+        chipTime: netTimeStr ? this.normalizeTime(netTimeStr) : undefined,
+        pacePerMile: extractField('pace') ? this.normalizeTime(extractField('pace')) : '',
         isDNF: hasTime ? false : true,
         isDQ: false
       };
@@ -668,26 +702,46 @@ export class MCRRCScraper {
         }
       }
       
-      // Extract times - scan full line first to preserve left-to-right order (gun time then pace)
+      // Extract times robustly ignoring split times: scan all times in the line
       const timePatternGlobal = /\d{1,2}:\d{2}(?::\d{2})?/g;
       const timePatternTest = /\d{1,2}:\d{2}(?::\d{2})?/;
       let gunTime = '';
+      let netTime: string | undefined;
       let paceStr = '';
-      
-      const timeMatches = trimmed.match(timePatternGlobal) || [];
-      if (timeMatches.length >= 1) gunTime = timeMatches[0];
-      if (timeMatches.length >= 2) paceStr = timeMatches[1];
-      
-      // Fallback to mapped columns only if scanning did not find values
-      if (!gunTime) {
-        if (columns.gunTime !== undefined && parts[columns.gunTime]) {
-          gunTime = parts[columns.gunTime];
-        } else if (columns.time !== undefined && parts[columns.time]) {
-          gunTime = parts[columns.time];
-        }
+
+      const allTimes = trimmed.match(timePatternGlobal) || [];
+      if (allTimes.length >= 1) paceStr = allTimes[allTimes.length - 1];
+      if (allTimes.length >= 2) netTime = allTimes[allTimes.length - 2];
+      if (allTimes.length >= 3) gunTime = allTimes[allTimes.length - 3];
+      if (!gunTime && allTimes.length === 2) gunTime = allTimes[0];
+      if (!gunTime && allTimes.length === 1) gunTime = allTimes[0];
+
+      // Allow explicit mapped columns to override if present
+      const extractFirstTime = (s: string): string => {
+        const m = s?.match(timePatternGlobal) || [];
+        return m.length > 0 ? m[0] : '';
+      };
+      if (columns.gunTime !== undefined && parts[columns.gunTime]) {
+        const mappedGun = extractFirstTime(parts[columns.gunTime]);
+        if (mappedGun) gunTime = mappedGun;
+      } else if (columns.time !== undefined && parts[columns.time]) {
+        const mappedTime = extractFirstTime(parts[columns.time]);
+        if (mappedTime) gunTime = mappedTime;
       }
-      if (!paceStr && columns.pace !== undefined && parts[columns.pace]) {
-        paceStr = parts[columns.pace];
+      if (columns.netTime !== undefined && parts[columns.netTime]) {
+        const mappedNet = extractFirstTime(parts[columns.netTime]);
+        if (mappedNet) netTime = mappedNet;
+      }
+      if (columns.pace !== undefined && parts[columns.pace]) {
+        const p = parts[columns.pace];
+        const pm = p?.match(timePatternGlobal) || [];
+        if (pm.length > 0) paceStr = pm[pm.length - 1];
+      }
+
+      // Final guard: avoid mistakenly using pace/net as gun time
+      if (gunTime && (gunTime === paceStr || (netTime && gunTime === netTime))) {
+        if (allTimes.length >= 3) gunTime = allTimes[allTimes.length - 3];
+        else if (allTimes.length >= 2) gunTime = allTimes[0];
       }
       
       // As last resort for gun time, scan other fields including club
@@ -715,7 +769,7 @@ export class MCRRCScraper {
         if (match) ageGroupPlace = parseInt(match[1]);
       }
       
-      if (!bibNumber || !firstName || !gunTime) {
+      if (!firstName || !gunTime) {
         console.warn('Missing required fields:', { bibNumber, firstName, gunTime, line: trimmed.substring(0, 50) });
         return { result: null, runner: null };
       }
@@ -726,7 +780,7 @@ export class MCRRCScraper {
         placeGender: genderPlace,
         placeAgeGroup: ageGroupPlace,
         gunTime: this.normalizeTime(gunTime),
-        chipTime: undefined,
+        chipTime: netTime ? this.normalizeTime(netTime) : undefined,
         pacePerMile: paceStr ? this.normalizeTime(paceStr) : '',
         isDNF: false,
         isDQ: false
@@ -739,6 +793,13 @@ export class MCRRCScraper {
         gender: gender,
         age: age
       };
+
+      // If still no bibNumber, synthesize from name
+      if (!result.bibNumber) {
+        const synthesized = this.bibFromName(firstName, lastName);
+        result.bibNumber = synthesized;
+        runner.bibNumber = synthesized;
+      }
 
       return { result, runner };
 
@@ -880,6 +941,14 @@ export class MCRRCScraper {
             parsed = this.parsePlainTextLine(trimmedLine, columns, defaultGender);
           }
           
+          // Fallback tolerant parser for legacy lines without bib column
+          if ((!parsed.result || !parsed.runner) && defaultGender) {
+            const fallback = this.simpleParseLegacyPlainText(trimmedLine, defaultGender);
+            if (fallback.result && fallback.runner) {
+              parsed = fallback;
+            }
+          }
+
           if (parsed.result && parsed.runner) {
             results.push(parsed.result);
             
@@ -1045,11 +1114,29 @@ export class MCRRCScraper {
         return index !== undefined ? $(cells[index]).text().trim() : '';
       };
 
-      const bibNumber = getText('bib') || '0';
+      const rawBibText = getText('bib');
+      const bibNumber = rawBibText || '0';
       const fullName = getText('name');
       const ageText = getText('age');
       const genderText = getText('gender');
       const club = getText('club');
+
+      // Heuristic: skip clearly malformed rows where the columns are shifted, e.g.:
+      // - Name appears in the bib column (contains spaces or comma)
+      // - Age appears in the gender/sex column (pure number like "48")
+      // - Age column is empty or non-numeric
+      const bibLooksLikeName = !!rawBibText && /[A-Za-z]/.test(rawBibText) && /[\s,]/.test(rawBibText);
+      const genderLooksNumeric = !!genderText && /^\d{1,3}$/.test(genderText);
+      const ageNotNumeric = !ageText || !/^\d{1,3}$/.test(ageText);
+      if (bibLooksLikeName && genderLooksNumeric && ageNotNumeric) {
+        console.warn('⏭️  Skipping malformed row (name in bib, age in gender):', {
+          bib: rawBibText?.slice(0, 30),
+          gender: genderText,
+          age: ageText,
+          name: fullName?.slice(0, 30)
+        });
+        return null;
+      }
 
       if (!fullName) return null;
 
@@ -1160,6 +1247,79 @@ export class MCRRCScraper {
 
     console.warn(`⚠️ Unable to parse time format: "${timeStr}" -> falling back to 00:00:00`);
     return '00:00:00';
+  }
+
+  /**
+   * Very tolerant parser for legacy plain-text lines with no explicit bib column.
+   * Extracts place, name, age, gun time, pace using regex and synthesizes a bib as U-<place>.
+   */
+  private simpleParseLegacyPlainText(
+    trimmedLine: string,
+    sectionGender: 'M' | 'F'
+  ): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+    try {
+      // Must start with place number
+      const placeMatch = trimmedLine.match(/^(\d+)/);
+      if (!placeMatch) return { result: null, runner: null };
+      const place = parseInt(placeMatch[1]);
+      if (!place) return { result: null, runner: null };
+
+      // Extract times in order: gun time then pace
+      const timeMatches = trimmedLine.match(/\d{1,2}:\d{2}(?::\d{2})?/g) || [];
+      const gunTime = timeMatches[0] ? this.normalizeTime(timeMatches[0]) : '';
+      const pace = timeMatches[1] ? this.normalizeTime(timeMatches[1]) : '';
+      if (!gunTime) return { result: null, runner: null };
+
+      // Extract name: take the token sequence after Div/Tot pattern up to age
+      // Common pattern: "<place>  <div/tot>  <name>  <age> <city> ..."
+      // Remove place and optional div/tot
+      let rest = trimmedLine.replace(/^\d+\s+/, '');
+      rest = rest.replace(/^\d+\/\d+\s+/, '');
+
+      // Find age token (two-digit or more) and split there
+      const ageMatch = rest.match(/\s(\d{1,3})\s/);
+      let name = '';
+      let age = 35;
+      if (ageMatch) {
+        const idx = rest.indexOf(ageMatch[0]);
+        name = rest.substring(0, idx).trim();
+        age = parseInt(ageMatch[1]) || 35;
+      } else {
+        // Fallback: take up to first time occurrence
+        const timeIdx = rest.search(/\d{1,2}:\d{2}/);
+        name = (timeIdx > 0 ? rest.substring(0, timeIdx) : rest).trim();
+      }
+
+      const nameTokens = name.split(/\s+/).filter(Boolean);
+      const firstName = nameTokens[0] || '';
+      const lastName = nameTokens.slice(1).join(' ') || '';
+      if (!firstName) return { result: null, runner: null };
+
+      const bibNumber = this.bibFromName(firstName, lastName);
+      const result: ScrapedRaceResult = {
+        bibNumber,
+        place,
+        placeGender: place,
+        placeAgeGroup: place,
+        gunTime,
+        chipTime: undefined,
+        pacePerMile: pace,
+        isDNF: false,
+        isDQ: false
+      };
+
+      const runner: ScrapedRunner = {
+        bibNumber,
+        firstName,
+        lastName,
+        gender: sectionGender,
+        age
+      };
+
+      return { result, runner };
+    } catch {
+      return { result: null, runner: null };
+    }
   }
 
   /**

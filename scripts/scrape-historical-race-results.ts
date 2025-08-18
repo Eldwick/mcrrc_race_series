@@ -442,6 +442,11 @@ class HistoricalRaceResultsScraper {
 
       // Scrape the race
       const scrapedRace = await this.scraper.scrapeRace(url);
+      // If the page doesn't provide a reliable date/year, force the known year from the mapping
+      const scrapedYear = scrapedRace.date ? new Date(scrapedRace.date).getFullYear() : NaN;
+      if (!scrapedRace.date || Number.isNaN(scrapedYear) || scrapedYear !== year) {
+        scrapedRace.date = `${year}-01-01`;
+      }
       
       // Store in database using the existing scraper methods
       await this.scraper.storeRaceData(scrapedRace, seriesId);
