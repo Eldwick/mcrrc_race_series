@@ -34,6 +34,7 @@
     "debug:race-scraper": "tsx scripts/debug-race-scraper.ts",
     "debug:race-scraper:interactive": "tsx scripts/debug-race-scraper.ts --interactive",
     "verify-race-fix": "tsx scripts/verify-race-fix.ts",
+    "reset-and-rescrape-course": "tsx scripts/reset-and-rescrape-course.ts",
     "scrape-single-race": "tsx scripts/scrape-single-race.ts",
     "test-scraper": "tsx lib/scraping/test-scraper.ts",
     "scrape:historical": "NODE_NO_WARNINGS=1 tsx scripts/scrape-historical-championship-races.ts",

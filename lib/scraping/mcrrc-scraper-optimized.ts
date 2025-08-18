@@ -9,6 +9,11 @@ import { ScrapedRaceResult, ScrapedRace } from './mcrrc-scraper.js';
  * Replaces the sequential processing in storeRaceData
  */
 export class MCRRCScraperOptimized {
+  private sanitizeBibNumber(raw: string): string {
+    if (!raw) return '';
+    const cleaned = raw.toString().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    return cleaned.slice(0, 10);
+  }
   
   /**
    * OPTIMIZED: Store race results in batches instead of individually
@@ -26,8 +31,9 @@ export class MCRRCScraperOptimized {
       return { created: 0, skipped: 0 };
     }
 
-    // OPTIMIZATION 1: Pre-load ALL registration mappings to eliminate N+1 queries
-    const registrationMap = await this.preloadRegistrationMappings(sql, seriesId);
+    // OPTIMIZATION 1: Pre-load ONLY NEEDED registration mappings to eliminate N+1 queries
+    const neededBibs = Array.from(new Set(results.map(r => this.sanitizeBibNumber(r.bibNumber)))).filter(Boolean);
+    const registrationMap = await this.preloadRegistrationMappings(sql, seriesId, neededBibs);
     console.log(`   📋 Pre-loaded ${registrationMap.size} registration mappings`);
 
     // OPTIMIZATION 2: Filter results and prepare for bulk insert
@@ -42,10 +48,11 @@ export class MCRRCScraperOptimized {
     let skippedCount = 0;
     
     for (const result of results) {
-      const registrationId = registrationMap.get(result.bibNumber);
+      const bib = this.sanitizeBibNumber(result.bibNumber);
+      const registrationId = registrationMap.get(bib);
       
       if (!registrationId) {
-        console.warn(`⚠️ No registration found for bib ${result.bibNumber} - skipping result`);
+        console.warn(`⚠️ No registration found for bib ${bib} - skipping result`);
         skippedCount++;
         continue;
       }
@@ -69,15 +76,15 @@ export class MCRRCScraperOptimized {
       return { created: 0, skipped: skippedCount };
     }
 
-    // OPTIMIZATION 3: Insert results in optimized batches
+    // OPTIMIZATION 3: Insert results in optimized batches with limited concurrency
     const BATCH_SIZE = 50; // Smaller batches for Neon SQL compatibility
+    const CONCURRENCY = 8; // Cap parallel inserts to avoid saturating the DB
     let totalCreated = 0;
 
     for (let i = 0; i < validResults.length; i += BATCH_SIZE) {
       const batch = validResults.slice(i, i + BATCH_SIZE);
-      const batchCreated = await this.bulkInsertResults(sql, batch, raceId);
+      const batchCreated = await this.bulkInsertResults(sql, batch, raceId, CONCURRENCY);
       totalCreated += batchCreated;
-      
       if (validResults.length > BATCH_SIZE) {
         console.log(`   ✨ Processed batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(validResults.length / BATCH_SIZE)}: ${batchCreated} results`);
       }
@@ -90,12 +97,33 @@ export class MCRRCScraperOptimized {
   /**
    * Pre-load all registration mappings for a series to eliminate N+1 queries
    */
-  private async preloadRegistrationMappings(sql: any, seriesId: string): Promise<Map<string, string>> {
-    const registrations = await sql`
-      SELECT bib_number, id 
-      FROM series_registrations 
-      WHERE series_id = ${seriesId}
-    ` as Array<{bib_number: string, id: string}>;
+  private async preloadRegistrationMappings(sql: any, seriesId: string, bibNumbers?: string[]): Promise<Map<string, string>> {
+    let registrations: Array<{bib_number: string, id: string}> = [];
+    try {
+      if (bibNumbers && bibNumbers.length > 0 && typeof (sql as any).array === 'function') {
+        const uniqueBibs = Array.from(new Set(bibNumbers));
+        registrations = await sql`
+          SELECT bib_number, id
+          FROM series_registrations
+          WHERE series_id = ${seriesId}
+            AND bib_number = ANY(${(sql as any).array(uniqueBibs, 'text')})
+        ` as Array<{bib_number: string, id: string}>;
+      } else {
+        // Fallback: load all registrations for series (maintains test compatibility)
+        registrations = await sql`
+          SELECT bib_number, id 
+          FROM series_registrations 
+          WHERE series_id = ${seriesId}
+        ` as Array<{bib_number: string, id: string}>;
+      }
+    } catch (_err) {
+      // Safe fallback if driver does not support array parameters
+      registrations = await sql`
+        SELECT bib_number, id 
+        FROM series_registrations 
+        WHERE series_id = ${seriesId}
+      ` as Array<{bib_number: string, id: string}>;
+    }
 
     const map = new Map<string, string>();
     registrations.forEach(reg => {
@@ -117,47 +145,37 @@ export class MCRRCScraperOptimized {
       chipTimeInterval: string | null;
       paceInterval: string;
     }>,
-    raceId: string
+    raceId: string,
+    concurrency: number = 8
   ): Promise<number> {
     
-    // Build multi-value INSERT query
-    const values = batch.map(item => sql`(
-      ${raceId}, 
-      ${item.registrationId}, 
-      ${item.result.place}, 
-      ${item.result.placeGender}, 
-      ${item.result.placeAgeGroup},
-      ${item.gunTimeInterval}::interval, 
-      ${item.chipTimeInterval ? sql`${item.chipTimeInterval}::interval` : sql`NULL`}, 
-      ${item.paceInterval}::interval, 
-      ${item.result.isDNF}, 
-      ${item.result.isDQ}
-    )`);
-
-    // Execute bulk insert using individual statements for compatibility
-    // Note: Neon SQL requires tagged templates, so we'll batch individual inserts
+    // Execute inserts in parallel with limited concurrency to reduce round-trips
     let insertedCount = 0;
-    
-    for (const item of batch) {
-      await sql`
-        INSERT INTO race_results (
-          race_id, series_registration_id, place, place_gender, place_age_group,
-          gun_time, chip_time, pace_per_mile, is_dnf, is_dq
-        )
-        VALUES (
-          ${raceId}, 
-          ${item.registrationId}, 
-          ${item.result.place}, 
-          ${item.result.placeGender}, 
-          ${item.result.placeAgeGroup},
-          ${item.gunTimeInterval}, 
-          ${item.chipTimeInterval}, 
-          ${item.paceInterval}, 
-          ${item.result.isDNF}, 
-          ${item.result.isDQ}
-        )
-      `;
-      insertedCount++;
+    let index = 0;
+    while (index < batch.length) {
+      const slice = batch.slice(index, index + concurrency);
+      await Promise.all(slice.map(async (item) => {
+        await sql`
+          INSERT INTO race_results (
+            race_id, series_registration_id, place, place_gender, place_age_group,
+            gun_time, chip_time, pace_per_mile, is_dnf, is_dq
+          )
+          VALUES (
+            ${raceId}, 
+            ${item.registrationId}, 
+            ${item.result.place}, 
+            ${item.result.placeGender}, 
+            ${item.result.placeAgeGroup},
+            ${item.gunTimeInterval}, 
+            ${item.chipTimeInterval}, 
+            ${item.paceInterval}, 
+            ${item.result.isDNF}, 
+            ${item.result.isDQ}
+          )
+        `;
+        insertedCount++;
+      }));
+      index += concurrency;
     }
 
     return insertedCount;
@@ -178,21 +196,41 @@ export class MCRRCScraperOptimized {
       return '00:00:00';
     }
 
-    // Remove any whitespace
-    timeStr = timeStr.trim();
+    // Normalize whitespace and remove decimals/newlines or stray chars
+    let processed = timeStr.replace(/\s+/g, '').trim();
 
-    // Handle MM:SS format (add leading hour)
-    if (/^\d{1,2}:\d{2}$/.test(timeStr)) {
-      return `00:${timeStr}`;
+    // Truncate decimal seconds if present (e.g., 4:29.4 -> 4:29)
+    if (processed.includes('.')) {
+      const parts = processed.split('.');
+      if (parts.length >= 2 && /^\d/.test(parts[1])) {
+        processed = parts[0];
+      }
     }
 
-    // Handle H:MM:SS format (pad hour)
-    if (/^\d{1}:\d{2}:\d{2}$/.test(timeStr)) {
-      return `0${timeStr}`;
+    // Keep only digits and colons
+    processed = processed.replace(/[^\d:]/g, '');
+
+    const parts = processed.split(':').filter(Boolean);
+    if (parts.length === 1) {
+      const totalSeconds = parseInt(parts[0]) || 0;
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `00:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    } else if (parts.length === 2) {
+      const minutes = parseInt(parts[0]) || 0;
+      const seconds = parseInt(parts[1]) || 0;
+      const validSeconds = seconds > 59 ? 59 : seconds;
+      return `00:${minutes.toString().padStart(2, '0')}:${validSeconds.toString().padStart(2, '0')}`;
+    } else if (parts.length >= 3) {
+      const hours = parseInt(parts[0]) || 0;
+      const minutes = parseInt(parts[1]) || 0;
+      const seconds = parseInt(parts[2]) || 0;
+      const validMinutes = minutes > 59 ? 59 : minutes;
+      const validSeconds = seconds > 59 ? 59 : seconds;
+      return `${hours.toString().padStart(2, '0')}:${validMinutes.toString().padStart(2, '0')}:${validSeconds.toString().padStart(2, '0')}`;
     }
 
-    // Already in HH:MM:SS format or other valid format
-    return timeStr;
+    return '00:00:00';
   }
 
   /**
@@ -282,21 +320,25 @@ export class MCRRCScraperOptimized {
     // Get unique runner combinations
     const runnerKeys = [...new Set(runners.map(r => this.getRunnerKey(r)))];
     
-    // For compatibility with Neon SQL, we'll use individual queries for now
-    // This is still much faster than the original N+1 approach
+    // For compatibility with Neon SQL, run lookups in parallel with capped concurrency
     const existingRunners: Array<{id: string, first_name: string, last_name: string, birth_year: number}> = [];
-    
-    for (const key of runnerKeys) {
-      const [firstName, lastName, birthYear] = key.split('|');
-      const result = await sql`
-        SELECT id, first_name, last_name, birth_year 
-        FROM runners 
-        WHERE first_name = ${firstName} AND last_name = ${lastName} AND birth_year = ${parseInt(birthYear)}
-      `;
-      
-      if (result.length > 0) {
-        existingRunners.push(...result);
+    const CONCURRENCY = 10;
+    let idx = 0;
+    while (idx < runnerKeys.length) {
+      const slice = runnerKeys.slice(idx, idx + CONCURRENCY);
+      const results = await Promise.all(slice.map(async (key) => {
+        const [firstName, lastName, birthYear] = key.split('|');
+        const rows = await sql`
+          SELECT id, first_name, last_name, birth_year 
+          FROM runners 
+          WHERE first_name = ${firstName} AND last_name = ${lastName} AND birth_year = ${parseInt(birthYear)}
+        `;
+        return rows as Array<{id: string, first_name: string, last_name: string, birth_year: number}>;
+      }));
+      for (const group of results) {
+        if (group && group.length > 0) existingRunners.push(...group);
       }
+      idx += CONCURRENCY;
     }
 
     // Build map
@@ -332,17 +374,14 @@ export class MCRRCScraperOptimized {
     
     for (let i = 0; i < runners.length; i += BATCH_SIZE) {
       const batch = runners.slice(i, i + BATCH_SIZE);
-      
-      for (const runner of batch) {
+      await Promise.all(batch.map(async (runner) => {
         const birthYear = currentYear - runner.age;
-        
         await sql`
           INSERT INTO runners (first_name, last_name, gender, birth_year, club)
           VALUES (${runner.firstName}, ${runner.lastName}, ${runner.gender}, ${birthYear}, ${runner.club || null})
         `;
-        created++;
-      }
-      
+      }));
+      created += batch.length;
       if (runners.length > BATCH_SIZE) {
         console.log(`   📝 Created runners batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(runners.length / BATCH_SIZE)}`);
       }
@@ -363,9 +402,7 @@ export class MCRRCScraperOptimized {
 
     for (let i = 0; i < runners.length; i += BATCH_SIZE) {
       const batch = runners.slice(i, i + BATCH_SIZE);
-      
-      // Update each runner in the batch
-      for (const {runner, id} of batch) {
+      await Promise.all(batch.map(async ({runner, id}) => {
         await sql`
           UPDATE runners SET
             gender = ${runner.gender},
@@ -373,8 +410,8 @@ export class MCRRCScraperOptimized {
             updated_at = NOW()
           WHERE id = ${id}
         `;
-        updated++;
-      }
+      }));
+      updated += batch.length;
     }
 
     return updated;
@@ -397,22 +434,18 @@ export class MCRRCScraperOptimized {
 
     for (let i = 0; i < runners.length; i += BATCH_SIZE) {
       const batch = runners.slice(i, i + BATCH_SIZE);
-      
-      for (const runner of batch) {
+      await Promise.all(batch.map(async (runner) => {
         const key = this.getRunnerKey(runner);
         const runnerId = runnersMap.get(key);
-        
         if (!runnerId) {
           console.warn(`⚠️ Runner ID not found for ${runner.firstName} ${runner.lastName}`);
-          continue;
+          return;
         }
-
         const ageGroup = this.getAgeGroup(runner.age);
-        
         try {
           await sql`
             INSERT INTO series_registrations (series_id, runner_id, bib_number, age, age_group)
-            VALUES (${seriesId}, ${runnerId}, ${runner.bibNumber}, ${runner.age}, ${ageGroup})
+            VALUES (${seriesId}, ${runnerId}, ${this.sanitizeBibNumber(runner.bibNumber)}, ${runner.age}, ${ageGroup})
             ON CONFLICT (series_id, bib_number) DO UPDATE SET
               runner_id = EXCLUDED.runner_id,
               age = EXCLUDED.age,
@@ -427,7 +460,7 @@ export class MCRRCScraperOptimized {
             throw error;
           }
         }
-      }
+      }));
     }
 
     return processed;

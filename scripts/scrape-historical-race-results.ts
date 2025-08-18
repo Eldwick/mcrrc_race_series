@@ -17,9 +17,10 @@
 import { getSql } from '../lib/db/connection.js';
 import { MCRRCScraper } from '../lib/scraping/mcrrc-scraper.js';
 import 'dotenv/config';
+import { linkRacesToCourses } from './link-races-to-courses.js';
 
 // Historical race URLs discovered by the scraping script
-const BASED_HISTORICAL_RACE_RESULT_URL_OUTPUT = [
+export const BASED_HISTORICAL_RACE_RESULT_URL_OUTPUT = [
     {
       "name": "Kemp Mill (C)hills",
       "result_urls": {
@@ -334,6 +335,10 @@ class HistoricalRaceResultsScraper {
     for (const raceData of BASED_HISTORICAL_RACE_RESULT_URL_OUTPUT) {
       await this.scrapeRaceResults(raceData, targetYears);
     }
+
+    // After scraping all, link races to courses
+    console.log(`\n🔗 Linking races to courses...`);
+    await linkRacesToCourses();
 
     this.printFinalSummary();
   }

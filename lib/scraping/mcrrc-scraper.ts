@@ -55,6 +55,17 @@ export class MCRRCScraper {
     axios.defaults.maxRedirects = 3; // Limit redirects
     axios.defaults.validateStatus = (status) => status < 400; // Accept more status codes
   }
+  /**
+   * Sanitize bib numbers to fit DB constraints (VARCHAR(10))
+   */
+  private sanitizeBibNumber(raw: string): string {
+    if (!raw) return '';
+    const cleaned = raw.toString().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    if (cleaned.length > 10) {
+      console.warn(`⚠️ Truncating long bib "${cleaned}" to 10 chars`);
+    }
+    return cleaned.slice(0, 10);
+  }
 
   /**
    * Scrape a single race result page
@@ -430,7 +441,12 @@ export class MCRRCScraper {
   /**
    * Parse a single result line using fixed-width column mapping
    */
-  private parseFixedWidthLine(line: string, columns: { [key: string]: { start: number, end: number } }, expectedLeadingSpaces: number = 0): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+  private parseFixedWidthLine(
+    line: string,
+    columns: { [key: string]: { start: number, end: number } },
+    expectedLeadingSpaces: number = 0,
+    defaultGender?: 'M' | 'F'
+  ): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
     try {
       // Don't trim the line! Keep the original spacing to match column positions
       if (!line || !line.trim().match(/^\s*\d+/)) {
@@ -462,6 +478,7 @@ export class MCRRCScraper {
         console.warn('No bib number found in fixed-width line');
         bibNumber = `U-${place}`;
       }
+      bibNumber = this.sanitizeBibNumber(bibNumber);
       
       // Extract name with cleanup for stray numeric tokens
       const fullName = extractField('name');
@@ -482,7 +499,10 @@ export class MCRRCScraper {
       
       // Extract gender
       const genderStr = extractField('gender');
-      const gender: 'M' | 'F' = genderStr === 'F' ? 'F' : 'M';
+      let gender: 'M' | 'F' = 'M';
+      if (genderStr === 'F') gender = 'F';
+      else if (genderStr === 'M') gender = 'M';
+      else if (defaultGender) gender = defaultGender;
       
       // Extract age
       const ageStr = extractField('age');
@@ -544,7 +564,11 @@ export class MCRRCScraper {
   /**
    * Parse a single result line using dynamic column mapping
    */
-  private parsePlainTextLine(line: string, columns: { [key: string]: number }): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+  private parsePlainTextLine(
+    line: string,
+    columns: { [key: string]: number },
+    defaultGender?: 'M' | 'F'
+  ): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
     try {
       const trimmed = line.trim();
       if (!trimmed || !trimmed.match(/^\s*\d+/)) {
@@ -563,13 +587,27 @@ export class MCRRCScraper {
       const place = parseInt(parts[columns.place] || parts[0] || '0');
       if (!place) return { result: null, runner: null };
       
-      // Extract bib number - try different strategies
+      // Extract bib number - robust strategies
       let bibNumber = '';
+      const isPureNumber = (s: string) => /^\d+$/.test(s);
       if (columns.bibNumber !== undefined && parts[columns.bibNumber]) {
-        bibNumber = parts[columns.bibNumber];
-      } else {
-        // Look for a numeric field that could be bib
-        const numericFields = parts.filter(part => /^\d+$/.test(part));
+        const candidate = parts[columns.bibNumber].trim();
+        if (isPureNumber(candidate)) {
+          bibNumber = candidate;
+        }
+      }
+      bibNumber = this.sanitizeBibNumber(bibNumber);
+      if (!bibNumber) {
+        // Try to pull leading number from the name field (common in this format)
+        const nameField = columns.name !== undefined ? parts[columns.name] : '';
+        const leadingNumMatch = nameField?.trim().match(/^(\d{1,5})\s+/);
+        if (leadingNumMatch) {
+          bibNumber = leadingNumMatch[1];
+        }
+      }
+      if (!bibNumber) {
+        // Fallback: look for the first pure number token after place
+        const numericFields = parts.filter(part => isPureNumber(part));
         if (numericFields.length >= 2) {
           bibNumber = numericFields[1]; // Usually second number after place
         }
@@ -597,8 +635,8 @@ export class MCRRCScraper {
         }
       }
       
-      // Extract gender - try different strategies
-      let gender: 'M' | 'F' = 'M';
+      // Extract gender - prefer section default if provided
+      let gender: 'M' | 'F' = defaultGender ?? 'M';
       if (columns.gender !== undefined && parts[columns.gender]) {
         gender = parts[columns.gender] === 'F' ? 'F' : 'M';
       } else {
@@ -630,21 +668,37 @@ export class MCRRCScraper {
         }
       }
       
-      // Extract times - be flexible with time formats
-      const timePattern = /\d{1,2}:\d{2}(:\d{2})?/;
+      // Extract times - scan full line first to preserve left-to-right order (gun time then pace)
+      const timePatternGlobal = /\d{1,2}:\d{2}(?::\d{2})?/g;
+      const timePatternTest = /\d{1,2}:\d{2}(?::\d{2})?/;
       let gunTime = '';
+      let paceStr = '';
       
-      if (columns.gunTime !== undefined && parts[columns.gunTime]) {
-        gunTime = parts[columns.gunTime];
-      } else if (columns.time !== undefined && parts[columns.time]) {
-        gunTime = parts[columns.time];
-      } else {
-        // Find any time-like field
-        const timeField = parts.find(part => timePattern.test(part)) ||
-                          singleSpaceParts.find(part => timePattern.test(part));
-        if (timeField) {
-          gunTime = timeField;
+      const timeMatches = trimmed.match(timePatternGlobal) || [];
+      if (timeMatches.length >= 1) gunTime = timeMatches[0];
+      if (timeMatches.length >= 2) paceStr = timeMatches[1];
+      
+      // Fallback to mapped columns only if scanning did not find values
+      if (!gunTime) {
+        if (columns.gunTime !== undefined && parts[columns.gunTime]) {
+          gunTime = parts[columns.gunTime];
+        } else if (columns.time !== undefined && parts[columns.time]) {
+          gunTime = parts[columns.time];
         }
+      }
+      if (!paceStr && columns.pace !== undefined && parts[columns.pace]) {
+        paceStr = parts[columns.pace];
+      }
+      
+      // As last resort for gun time, scan other fields including club
+      if (!timePatternTest.test(gunTime)) {
+        const searchPool = [
+          ...(columns.club !== undefined ? [parts[columns.club]] : []),
+          ...parts,
+          ...singleSpaceParts
+        ].filter(Boolean) as string[];
+        const found = searchPool.find(p => timePatternTest.test(p));
+        if (found) gunTime = found;
       }
       
       // Extract places from ratio fields like "5/123"
@@ -673,7 +727,7 @@ export class MCRRCScraper {
         placeAgeGroup: ageGroupPlace,
         gunTime: this.normalizeTime(gunTime),
         chipTime: undefined,
-        pacePerMile: '',
+        pacePerMile: paceStr ? this.normalizeTime(paceStr) : '',
         isDNF: false,
         isDQ: false
       };
@@ -755,6 +809,12 @@ export class MCRRCScraper {
         }
       }
 
+      // Detect gender section header line indices for later per-line inference
+      const genderSectionLines = lines.map(l => l.toLowerCase());
+      const maleSectionIndex = genderSectionLines.findIndex(l => l.includes('official results') && l.includes('male'));
+      const femaleSectionIndex = genderSectionLines.findIndex(l => l.includes('official results') && l.includes('female'));
+      let currentSectionGender: 'M' | 'F' | undefined = undefined;
+
       // Process result lines using dynamic parsing
       let resultCount = 0;
       for (let i = startLineIndex; i < lines.length; i++) {
@@ -778,17 +838,46 @@ export class MCRRCScraper {
           continue;
         }
 
+        // Update gender section when header markers appear
+        const lower = trimmedLine.toLowerCase();
+        if (lower.includes('official results') && lower.includes('male')) {
+          currentSectionGender = 'M';
+          continue;
+        }
+        if (lower.includes('official results') && lower.includes('female')) {
+          currentSectionGender = 'F';
+          continue;
+        }
+
+        // Detect a repeated header (e.g., Place/Div/Tot/Time/Pace) signaling next section
+        if (lower.includes('place') && lower.includes('div/tot') && (lower.includes('time') || lower.includes('tim')) && lower.includes('pace')) {
+          if (currentSectionGender === 'M' || currentSectionGender === undefined) {
+            // After male header, encountering another header implies female section
+            currentSectionGender = 'F';
+          }
+          continue;
+        }
+
         // Skip lines that don't start with a number (place)
         if (!/^\d+/.test(trimmedLine)) continue;
 
         try {
+          // Determine default gender if in a labeled section and no explicit gender column exists
+          let defaultGender: 'M' | 'F' | undefined = currentSectionGender;
+          const afterMale = maleSectionIndex !== -1 && i > maleSectionIndex;
+          const afterFemale = femaleSectionIndex !== -1 && i > femaleSectionIndex;
+          if (!defaultGender) {
+            if (afterFemale) defaultGender = 'F';
+            else if (afterMale && !afterFemale) defaultGender = 'M';
+          }
+
           // Use the appropriate parsing method based on format
           let parsed;
           if (isFixedWidth && fixedWidth) {
             // IMPORTANT: pass the untrimmed line for fixed-width parsing to preserve alignment
-            parsed = this.parseFixedWidthLine(rawLine, fixedWidth.columns, fixedWidth.expectedLeadingSpaces);
+            parsed = this.parseFixedWidthLine(rawLine, fixedWidth.columns, fixedWidth.expectedLeadingSpaces, defaultGender);
           } else {
-            parsed = this.parsePlainTextLine(trimmedLine, columns);
+            parsed = this.parsePlainTextLine(trimmedLine, columns, defaultGender);
           }
           
           if (parsed.result && parsed.runner) {
@@ -859,7 +948,7 @@ export class MCRRCScraper {
       // MCRRC specific column mappings
       if (h === 'place' || h.includes('place') || h.includes('pos') || h === '#' || h === 'pl') {
         map.place = index;
-      } else if (h === 'gen/tot' || h === 'gen' || h.includes('gender total')) {
+      } else if (h === 'gen/tot' || h === 'sex/tot' || h === 'gen' || h.includes('gender total')) {
         map.genderPlace = index;
       } else if (h === 'div/tot' || h === 'div' || h.includes('division') || h.includes('age group')) {
         map.ageGroupPlace = index;
@@ -901,7 +990,8 @@ export class MCRRCScraper {
         return index !== undefined ? $(cells[index]).text().trim() : '';
       };
 
-      const bibNumber = getText('bib') || '0';
+      let bibNumber = getText('bib') || '0';
+      bibNumber = this.sanitizeBibNumber(bibNumber);
       const placeText = getText('place');
       const gunTimeText = getText('gunTime');
 
