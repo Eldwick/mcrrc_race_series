@@ -2,7 +2,7 @@
 // POST /api/races - Create a new race
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAllRaces, getRaceSummary, formatTimeFromInterval } from '../../lib/db/utils.js';
+import { getAllRaces, getRaceSummary, formatTimeFromInterval } from '../../lib/db/utils';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

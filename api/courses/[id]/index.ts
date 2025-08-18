@@ -3,7 +3,7 @@
 // DELETE /api/courses/[id] - Delete race course
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSql } from '../../../lib/db/connection.js';
+import { getSql } from '../../../lib/db/connection';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

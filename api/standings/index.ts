@@ -2,7 +2,7 @@
 // POST /api/standings/recalculate - Recalculate standings
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSeriesStandings } from '../../lib/db/utils.js';
+import { getSeriesStandings } from '../../lib/db/utils';
 
 // Enable CORS for API routes
 function enableCors(res: VercelResponse) {

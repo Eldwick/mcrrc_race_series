@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { MCRRCScraper } from '../../lib/scraping/mcrrc-scraper.js';
+import { MCRRCScraper } from '../../lib/scraping/mcrrc-scraper';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 
