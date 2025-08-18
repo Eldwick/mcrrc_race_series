@@ -1,12 +1,13 @@
-import { defineConfig, configDefaults } from 'vitest/config'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // @ts-expect-error - Vite types don't include test config, but vitest extends them at runtime
   test: {
     environment: 'node',
-    exclude: [...configDefaults.exclude, 'scripts/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'scripts/**'],
     globals: true,
     setupFiles: []
   },
