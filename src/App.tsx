@@ -9,6 +9,7 @@ import { CoursesListPage } from './pages/course/CoursesListPage';
 import { CoursePage } from './pages/course/CoursePage';
 import { AdminPage } from './pages/admin/AdminPage';
 import { ScrapingPage } from './pages/admin/ScrapingPage';
+import { RaceUrlTesterPage } from './pages/admin/RaceUrlTesterPage';
 import { DataProvider } from './contexts/DataContext';
 
 function App() {
@@ -27,6 +28,7 @@ function App() {
             <Route path="/course/:id" element={<CoursePage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/scraping" element={<ScrapingPage />} />
+            <Route path="/admin/race-url-tester" element={<RaceUrlTesterPage />} />
             <Route path="*" element={<Navigate to="/leaderboard" replace />} />
           </Routes>
         </Layout>

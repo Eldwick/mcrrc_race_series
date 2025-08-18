@@ -140,6 +140,58 @@ export function CoursePage() {
     return matchesGender && matchesAgeGroup;
   }) || [];
 
+  // Determine rank label and which rank to display based on filters
+  const rankColumnLabel = (() => {
+    if (recordFilters.ageGroup !== 'overall') {
+      return 'AG Rank';
+    }
+    if (recordFilters.gender === 'all') {
+      return 'Overall Rank';
+    }
+    return 'Gender Rank';
+  })();
+
+  const getDisplayRank = (record: CourseRecord) => {
+    if (recordFilters.ageGroup !== 'overall') {
+      return record.rankings.ageGroupRank;
+    }
+    if (recordFilters.gender === 'all') {
+      return record.rankings.overallRank;
+    }
+    return record.rankings.genderRank;
+  };
+
+  // Post-filter sorting and trimming to avoid rank gaps per selected view
+  const displayedCourseRecords = (() => {
+    const base = [...filteredCourseRecords];
+    // Apply additional constraints to avoid mixing categories that cause gaps
+    if (recordFilters.ageGroup !== 'overall') {
+      // Top 20 per gender for the selected age group
+      const byAg = base
+        .filter(r => r.rankings.ageGroupRank <= 20)
+        .sort((a, b) => {
+          // Sort by gender then age group rank
+          if (a.runner.gender !== b.runner.gender) {
+            return a.runner.gender.localeCompare(b.runner.gender);
+          }
+          return a.rankings.ageGroupRank - b.rankings.ageGroupRank;
+        });
+      return byAg;
+    }
+
+    if (recordFilters.gender === 'all') {
+      // Only show overall top N to avoid gaps caused by gender/AG-only entries
+      return base
+        .filter(r => r.rankings.overallRank <= 30)
+        .sort((a, b) => a.rankings.overallRank - b.rankings.overallRank);
+    }
+
+    // Gender-specific view: top 10 by gender
+    return base
+      .filter(r => r.rankings.genderRank <= 10)
+      .sort((a, b) => a.rankings.genderRank - b.rankings.genderRank);
+  })();
+
   // Get unique age groups from records for filter dropdown
   const availableAgeGroups = Array.from(new Set(
     records?.courseRecords.map(record => record.runner.ageGroup).filter(Boolean)
@@ -227,9 +279,9 @@ export function CoursePage() {
           <Card>
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-green-600">
-                {course.statistics?.totalRaces || 0}
+                {course.statistics?.totalParticipants || 0}
               </div>
-              <div className="text-sm text-gray-600">Total Races</div>
+              <div className="text-sm text-gray-600">Total Runners</div>
             </CardContent>
           </Card>
         </div>
@@ -436,16 +488,24 @@ export function CoursePage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2">Rank</th>
+                        <th className="text-left py-2">{rankColumnLabel}</th>
                         <th className="text-left py-2">Runner</th>
                         <th className="text-left py-2">Time</th>
                         <th className="text-left py-2">Year</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredCourseRecords.map((record, index) => (
-                        <tr key={index} className="border-b hover:bg-gray-50">
-                          <td className="py-3">{record.rankings.overallRank}</td>
+                      {displayedCourseRecords.map((record, index) => (
+                        <tr
+                          key={index}
+                          className="border-b hover:bg-gray-50 cursor-pointer"
+                          onClick={() => {
+                            if (record.raceId) {
+                              window.location.href = `/race/${record.raceId}`;
+                            }
+                          }}
+                        >
+                          <td className="py-3">{getDisplayRank(record)}</td>
                           <td className="py-3">
                             <div>
                               <div className="font-medium">
@@ -479,7 +539,7 @@ export function CoursePage() {
                     </tbody>
                   </table>
                   
-                  {filteredCourseRecords.length === 0 && (
+                  {displayedCourseRecords.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       No records found for the selected filters.
                     </div>

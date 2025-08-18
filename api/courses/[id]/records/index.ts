@@ -53,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const records = await sql`
       WITH course_best_times AS (
         SELECT 
+          r.id as race_id,
           r.year,
           r.name as race_name,
           r.date as race_date,
@@ -97,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ELSE NULL 
         END as record_type
       FROM ranked_records
-      WHERE overall_rank <= 20 OR gender_rank <= 10 OR age_group_rank <= 3
+      WHERE overall_rank <= 30 OR gender_rank <= 20 OR age_group_rank <= 20
       ORDER BY overall_rank, gender, age_group
     ` as any[];
 
@@ -135,6 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ` as any[];
 
     const transformedRecords = records.map((record: any) => ({
+      raceId: record.race_id,
       year: record.year,
       raceName: record.race_name,
       raceDate: record.race_date,

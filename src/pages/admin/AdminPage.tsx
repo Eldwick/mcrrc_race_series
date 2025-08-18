@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, Download, RefreshCw, Settings, Database, Users, Calendar, Plus, Trash2 } from 'lucide-react';
+import { Upload, Download, RefreshCw, Settings, Database, Users, Calendar, Plus, Trash2, Bug } from 'lucide-react';
 import { useData } from '../../contexts/DataContext';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '../../components/ui';
 
@@ -227,6 +227,15 @@ export function AdminPage() {
                 >
                   <Settings className="w-4 h-4 mr-2" />
                   Advanced Scraping
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => window.open('/admin/race-url-tester', '_blank')}
+                >
+                  <Bug className="w-4 h-4 mr-2" />
+                  Debug Race URLs
                 </Button>
               </div>
             </div>

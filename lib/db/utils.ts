@@ -24,6 +24,7 @@ export interface DbRace {
   distance_miles: number | null;
   location: string | null;
   course_type: string | null;
+  race_course_id?: string | null;
   mcrrc_url: string | null;
   results_scraped_at: string | null;
   notes: string | null;
@@ -281,9 +282,28 @@ export async function getAllRaces(year?: number): Promise<DbRace[]> {
 export async function getRaceById(id: string): Promise<DbRace | null> {
   const sql = getSql();
   const rows = await sql`
-    SELECT * FROM races 
-    WHERE id = ${id}
-  ` as DbRace[];
+    SELECT 
+      r.id,
+      r.series_id,
+      r.name,
+      r.date,
+      r.year,
+      r.distance_miles,
+      r.location,
+      r.course_type,
+      r.race_course_id,
+      r.mcrrc_url,
+      r.results_scraped_at,
+      r.notes,
+      'scraped'::text as race_status,
+      r.planned_race_id,
+      r.created_at,
+      r.updated_at,
+      rc.name as race_course_name
+    FROM races r
+    LEFT JOIN race_courses rc ON rc.id = r.race_course_id
+    WHERE r.id = ${id}
+  ` as any[];
   return rows[0] ?? null;
 }
 

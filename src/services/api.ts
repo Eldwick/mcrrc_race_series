@@ -188,6 +188,8 @@ export const api = {
       isOfficial: true,
       raceUrl: race.mcrrcUrl || race.mcrrc_url,
       resultsUrl: race.mcrrcUrl || race.mcrrc_url,
+      raceCourseId: race.raceCourseId || race.race_course_id,
+      raceCourseName: race.raceCourseName || race.race_course_name,
       createdAt: race.createdAt || race.created_at,
       updatedAt: race.updatedAt || race.updated_at,
     };

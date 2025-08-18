@@ -6,6 +6,7 @@
  * This script links existing races in the database to the newly created race courses
  * based on name matching from the historical championship series data.
  */
+import 'dotenv/config';
 
 import { getSql } from '../lib/db/connection.js';
 

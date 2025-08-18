@@ -237,33 +237,465 @@ export class MCRRCScraper {
    * Detect if the page contains plain text results format (legacy MCRRC format)
    */
   private isPlainTextResults(bodyText: string): boolean {
-    // Look for characteristic patterns of the plain text format
-    const hasHeaderPattern = bodyText.includes('Place Sex/Tot') || 
-                           (bodyText.includes('Place') && bodyText.includes('Sex/Tot') && bodyText.includes('Name')) ||
-                           bodyText.includes('Place Sex/Tot  Div/Tot  Num   Name');
-    
-    const hasSeparatorLine = bodyText.includes('=====');
-    
-    // Look for lines that match the result pattern: number, ratio, ratio, number, names, gender, age, etc.
+    // Look for characteristic patterns of the plain text format - be more flexible
     const lines = bodyText.split('\n');
-    const hasResultPattern = lines.some(line => {
-      // Match lines like: "1   1/265    1/26     701 Karl Dusen            M 28"
-      return /^\s*\d+\s+\d+\/\d+\s+\d+\/\d+\s+\d+\s+[A-Za-z]/.test(line.trim());
+    
+    // Find header line with flexible patterns
+    const headerLineIndex = lines.findIndex(line => {
+      const lowerLine = line.toLowerCase();
+      // Look for lines containing typical race result headers
+      return (lowerLine.includes('place') && 
+              (lowerLine.includes('name') || lowerLine.includes('nam')) &&
+              (lowerLine.includes('time') || lowerLine.includes('tim') || lowerLine.includes('gun')) &&
+              (lowerLine.includes('/tot') || lowerLine.includes('gen') || lowerLine.includes('sex')));
     });
+    
+    if (headerLineIndex === -1) {
+      console.log('No plain text header pattern found');
+      return false;
+    }
+    
+    const headerLine = lines[headerLineIndex];
+    console.log('Potential plain text header found:', headerLine);
+    
+    // Look for separator line (with === or similar patterns)
+    const hasSeparatorLine = lines.some((line, index) => 
+      index > headerLineIndex && (line.includes('=====') || line.match(/^[\s=\-_]{10,}$/))
+    );
+    
+    // Look for result pattern lines after header
+    const hasResultPattern = lines.slice(headerLineIndex + 1).some(line => {
+      const trimmed = line.trim();
+      // Match lines that start with: number, followed by ratio patterns or bib numbers
+      return /^\s*\d+\s+((\d+\/\d+\s+){0,2})?(\d+\s+)?[A-Za-z]/.test(trimmed) ||
+             /^\s*\d+\s+\d+\s+[A-Za-z]/.test(trimmed); // Simple format: place bib name
+    });
+    
+    const detected = headerLineIndex >= 0 && (hasSeparatorLine || hasResultPattern);
     
     console.log('Plain text detection:', {
-      hasHeaderPattern,
+      headerLineIndex,
+      headerLine: headerLine?.substring(0, 50) + '...',
       hasSeparatorLine,
       hasResultPattern,
-      detected: hasHeaderPattern && hasSeparatorLine && hasResultPattern
+      detected
     });
     
-    return hasHeaderPattern && hasSeparatorLine && hasResultPattern;
+    return detected;
   }
 
   /**
-   * Extract results from plain text format (legacy MCRRC format)
-   * Format: Place Sex/Tot Div/Tot Num Name S Ag Hometown Club Net_Time Pace Gun_Time Pace
+   * Analyze fixed-width column positions using a more direct approach
+   */
+  private analyzeFixedWidthColumns(lines: string[], headerLineIndex: number): { columns: { [key: string]: { start: number, end: number } }, expectedLeadingSpaces: number } | null {
+      const headerLine = lines[headerLineIndex];
+
+    // Look for a separator line with === or similar patterns
+      const separatorLineIndex = lines.findIndex((line, index) => 
+      index > headerLineIndex && line.match(/^[\s=\-_]{20,}$/)
+      );
+
+      if (separatorLineIndex === -1) {
+      console.log('No separator line found for fixed-width parsing');
+      return null;
+    }
+    
+    const separatorLine = lines[separatorLineIndex];
+    const sampleDataLine = lines.find((line, idx) => idx > separatorLineIndex && /^\s*\d+/.test(line.trim()));
+    
+    console.log('Fixed-width analysis:');
+    console.log('Header  :', headerLine);
+    console.log('Separator:', separatorLine);
+    console.log('Sample  :', sampleDataLine);
+    
+    // Check if sample line has leading spaces that need to be accounted for
+    const sampleTrimmed = sampleDataLine?.trim();
+    const leadingSpaces = sampleDataLine ? sampleDataLine.indexOf(sampleTrimmed || '') : 0;
+    console.log('Sample leading spaces:', leadingSpaces);
+    
+    // Use the separator line to determine exact column boundaries
+    // Each section of = characters represents a column boundary
+    
+    const columns: { [key: string]: { start: number, end: number } } = {};
+    
+    // Parse separator line to find column start/end positions
+    const separatorSections: { start: number, end: number }[] = [];
+    let currentStart = -1;
+    
+    for (let i = 0; i < separatorLine.length; i++) {
+      if (separatorLine[i] === '=') {
+        if (currentStart === -1) {
+          currentStart = i; // Start of a new section
+        }
+      } else {
+        if (currentStart !== -1) {
+          separatorSections.push({ start: currentStart, end: i - 1 });
+          currentStart = -1;
+        }
+      }
+    }
+    
+    // Handle case where line ends with =
+    if (currentStart !== -1) {
+      separatorSections.push({ start: currentStart, end: separatorLine.length - 1 });
+    }
+    
+    console.log('Separator sections:', separatorSections);
+    
+    // Map sections to field types based on their position and header content
+    if (separatorSections.length >= 11) {
+      // Use separator line positions directly - they align with actual data positions
+      console.log('Using separator line positions directly (no adjustment needed)');
+      
+      columns.place = separatorSections[0];
+      columns.genderPlace = separatorSections[1];
+      columns.ageGroupPlace = separatorSections[2];
+      columns.bibNumber = separatorSections[3];
+      columns.name = separatorSections[4];
+      columns.gender = separatorSections[5];
+      columns.age = separatorSections[6];
+      columns.hometown = separatorSections[7];
+      columns.club = separatorSections[8];
+      columns.gunTime = separatorSections[9];
+      columns.pace = separatorSections[10];
+    } else {
+      console.warn('Unexpected number of separator sections:', separatorSections.length);
+      // Fallback to header-based detection
+      return null;
+    }
+    
+    console.log('Direct column mapping:', columns);
+    
+    // Test extraction on sample line if available
+    if (sampleDataLine) {
+      console.log('Testing field extraction on sample line:');
+      Object.entries(columns).forEach(([fieldType, boundary]) => {
+        const extracted = sampleDataLine.substring(boundary.start, boundary.end + 1).trim();
+        console.log(`  ${fieldType}: "${extracted}" (pos ${boundary.start}-${boundary.end})`);
+      });
+    }
+    
+    return { columns, expectedLeadingSpaces: leadingSpaces };
+  }
+
+  /**
+   * Dynamic column mapper for plain text results (fallback for non-fixed-width)
+   */
+  private analyzePlainTextColumns(headerLine: string): { [key: string]: number } {
+    const columns: { [key: string]: number } = {};
+    
+    // Split header by multiple spaces to identify column boundaries
+    const headerParts = headerLine.split(/\s{2,}/);
+    const fullHeader = headerLine.toLowerCase();
+    
+    console.log('Header analysis:', { headerParts, fullHeader });
+    
+    headerParts.forEach((part, index) => {
+      const lowerPart = part.toLowerCase().trim();
+      
+      // Map different column name variations to standardized types
+      if (lowerPart.includes('place') || lowerPart.match(/^p$/)) {
+        columns.place = index;
+      } else if (lowerPart.includes('gen/tot') || lowerPart.includes('sex/tot') || lowerPart.includes('g/t')) {
+        columns.genderPlace = index;
+      } else if (lowerPart.includes('div/tot') || lowerPart.includes('ag/tot') || lowerPart.includes('d/t')) {
+        columns.ageGroupPlace = index;
+      } else if (lowerPart.includes('num') || lowerPart.includes('bib') || lowerPart.match(/^#$/)) {
+        columns.bibNumber = index;
+      } else if (lowerPart.includes('name') || lowerPart.includes('nam')) {
+        columns.name = index;
+      } else if (lowerPart.match(/^g$/) || lowerPart.includes('gender') || lowerPart.includes('sex')) {
+        columns.gender = index;
+      } else if (lowerPart.match(/^ag$/) || lowerPart.includes('age')) {
+        columns.age = index;
+      } else if (lowerPart.includes('hometown') || lowerPart.includes('city')) {
+        columns.hometown = index;
+      } else if (lowerPart.includes('club') || lowerPart.includes('team')) {
+        columns.club = index;
+      } else if (lowerPart.includes('gun') && lowerPart.includes('tim')) {
+        columns.gunTime = index;
+      } else if (lowerPart.includes('net') && lowerPart.includes('tim')) {
+        columns.netTime = index;
+      } else if (lowerPart.includes('tim') || lowerPart.includes('time')) {
+        columns.time = index; // Generic time field
+      } else if (lowerPart.includes('pace')) {
+        columns.pace = index;
+      }
+    });
+    
+    console.log('Column mapping:', columns);
+    return columns;
+  }
+
+  /**
+   * Parse a single result line using fixed-width column mapping
+   */
+  private parseFixedWidthLine(line: string, columns: { [key: string]: { start: number, end: number } }, expectedLeadingSpaces: number = 0): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+    try {
+      // Don't trim the line! Keep the original spacing to match column positions
+      if (!line || !line.trim().match(/^\s*\d+/)) {
+        return { result: null, runner: null };
+      }
+
+      const trimmed = line.trim();
+
+      // Pad line to ensure safe substring operations for shorter lines
+      const maxColumnEnd = Math.max(...Object.values(columns).map(c => c.end));
+      const paddedLine = line.padEnd(maxColumnEnd + 1, ' ');
+
+      const extractField = (fieldName: string): string => {
+        const col = columns[fieldName];
+        if (!col) return '';
+
+        // Use absolute column positions derived from the separator line
+        return paddedLine.substring(col.start, col.end + 1).trim();
+      };
+      
+      // Extract basic fields
+      const placeStr = extractField('place');
+      const place = parseInt(placeStr) || 0;
+      if (!place) return { result: null, runner: null };
+      
+      // Extract bib number (allow missing by assigning a unique placeholder based on place)
+      let bibNumber = extractField('bibNumber');
+      if (!bibNumber) {
+        console.warn('No bib number found in fixed-width line');
+        bibNumber = `U-${place}`;
+      }
+      
+      // Extract name with cleanup for stray numeric tokens
+      const fullName = extractField('name');
+      const tokens = fullName.trim().split(/\s+/).filter(t => t !== '');
+      // Drop leading non-name tokens (pure digits or ratios like 1/172)
+      while (tokens.length > 0 && (/^\d+$/.test(tokens[0]) || /^\d+\/\d+$/.test(tokens[0]))) {
+        tokens.shift();
+      }
+      const firstName = tokens[0] || '';
+      const lastName = tokens.slice(1).join(' ') || '';
+      
+
+      
+      if (!firstName) {
+        console.warn('No name found in fixed-width line');
+        return { result: null, runner: null };
+      }
+      
+      // Extract gender
+      const genderStr = extractField('gender');
+      const gender: 'M' | 'F' = genderStr === 'F' ? 'F' : 'M';
+      
+      // Extract age
+      const ageStr = extractField('age');
+      const age = parseInt(ageStr) || 25;
+      
+      // Extract time (allow missing -> mark as DNF)
+      const timeStrRaw = extractField('gunTime') || extractField('time');
+      const hasTime = !!timeStrRaw && /\d{1,2}:\d{2}(:\d{2})?/.test(timeStrRaw);
+      
+      // Extract places from ratio fields
+      let genderPlace = place;
+      let ageGroupPlace = place;
+      
+      const genderPlaceStr = extractField('genderPlace');
+      if (genderPlaceStr) {
+        const match = genderPlaceStr.match(/(\d+)\/\d+/);
+        if (match) genderPlace = parseInt(match[1]);
+      }
+      
+      const ageGroupPlaceStr = extractField('ageGroupPlace');
+      if (ageGroupPlaceStr) {
+        const match = ageGroupPlaceStr.match(/(\d+)\/\d+/);
+        if (match) ageGroupPlace = parseInt(match[1]);
+      }
+      
+      // Extract optional fields
+      const hometown = extractField('hometown');
+      const club = extractField('club');
+
+      const result: ScrapedRaceResult = {
+        bibNumber: bibNumber,
+        place: place,
+        placeGender: genderPlace,
+        placeAgeGroup: ageGroupPlace,
+        gunTime: hasTime ? this.normalizeTime(timeStrRaw) : '00:00:00',
+        chipTime: undefined,
+        pacePerMile: extractField('pace') || '',
+        isDNF: hasTime ? false : true,
+        isDQ: false
+      };
+
+      const runner: ScrapedRunner = {
+        bibNumber: bibNumber,
+        firstName: firstName,
+        lastName: lastName,
+        gender: gender,
+        age: age,
+        club: club || undefined
+      };
+
+      return { result, runner };
+
+    } catch (error) {
+      console.warn('Error parsing fixed-width line:', error, line.substring(0, 50));
+      return { result: null, runner: null };
+    }
+  }
+
+  /**
+   * Parse a single result line using dynamic column mapping
+   */
+  private parsePlainTextLine(line: string, columns: { [key: string]: number }): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
+    try {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.match(/^\s*\d+/)) {
+        return { result: null, runner: null };
+      }
+
+      // Split by multiple spaces to match header structure
+      const parts = trimmed.split(/\s{2,}/).map(part => part.trim());
+      
+      // Also try single space splitting for more flexible parsing
+      const singleSpaceParts = trimmed.split(/\s+/);
+      
+      console.log('Parsing line:', { trimmed: trimmed.substring(0, 50), parts, columns });
+      
+      // Extract basic fields
+      const place = parseInt(parts[columns.place] || parts[0] || '0');
+      if (!place) return { result: null, runner: null };
+      
+      // Extract bib number - try different strategies
+      let bibNumber = '';
+      if (columns.bibNumber !== undefined && parts[columns.bibNumber]) {
+        bibNumber = parts[columns.bibNumber];
+      } else {
+        // Look for a numeric field that could be bib
+        const numericFields = parts.filter(part => /^\d+$/.test(part));
+        if (numericFields.length >= 2) {
+          bibNumber = numericFields[1]; // Usually second number after place
+        }
+      }
+      
+      // Extract name - handle different name field positions
+      let firstName = '', lastName = '';
+      if (columns.name !== undefined && parts[columns.name]) {
+        const nameTokens = parts[columns.name].split(/\s+/).filter(t => t !== '');
+        while (nameTokens.length > 0 && (/^\d+$/.test(nameTokens[0]) || /^\d+\/\d+$/.test(nameTokens[0]))) {
+          nameTokens.shift();
+        }
+        firstName = nameTokens[0] || '';
+        lastName = nameTokens.slice(1).join(' ') || '';
+      } else {
+        // Try to find name by position or pattern
+        const nameFieldIndex = parts.findIndex(part => /^[A-Za-z]/.test(part) && !['M', 'F'].includes(part));
+        if (nameFieldIndex >= 0) {
+          const nameTokens2 = parts[nameFieldIndex].split(/\s+/).filter(t => t !== '');
+          while (nameTokens2.length > 0 && (/^\d+$/.test(nameTokens2[0]) || /^\d+\/\d+$/.test(nameTokens2[0]))) {
+            nameTokens2.shift();
+          }
+          firstName = nameTokens2[0] || '';
+          lastName = nameTokens2.slice(1).join(' ') || '';
+        }
+      }
+      
+      // Extract gender - try different strategies
+      let gender: 'M' | 'F' = 'M';
+      if (columns.gender !== undefined && parts[columns.gender]) {
+        gender = parts[columns.gender] === 'F' ? 'F' : 'M';
+      } else {
+        // Look for M or F in the parts
+        const genderField = parts.find(part => part === 'M' || part === 'F');
+        if (genderField) {
+          gender = genderField as 'M' | 'F';
+        } else {
+          // Try single space split to find gender
+          const genderFromSingle = singleSpaceParts.find(part => part === 'M' || part === 'F');
+          if (genderFromSingle) {
+            gender = genderFromSingle as 'M' | 'F';
+          }
+        }
+      }
+      
+      // Extract age
+      let age = 25; // Default fallback
+      if (columns.age !== undefined && parts[columns.age]) {
+        age = parseInt(parts[columns.age]) || 25;
+      } else {
+        // Look for age in single space parts (often after gender)
+        const genderIndex = singleSpaceParts.findIndex(part => part === gender);
+        if (genderIndex >= 0 && genderIndex + 1 < singleSpaceParts.length) {
+          const ageStr = singleSpaceParts[genderIndex + 1];
+          if (/^\d{1,3}$/.test(ageStr)) {
+            age = parseInt(ageStr);
+          }
+        }
+      }
+      
+      // Extract times - be flexible with time formats
+      const timePattern = /\d{1,2}:\d{2}(:\d{2})?/;
+      let gunTime = '';
+      
+      if (columns.gunTime !== undefined && parts[columns.gunTime]) {
+        gunTime = parts[columns.gunTime];
+      } else if (columns.time !== undefined && parts[columns.time]) {
+        gunTime = parts[columns.time];
+      } else {
+        // Find any time-like field
+        const timeField = parts.find(part => timePattern.test(part)) ||
+                          singleSpaceParts.find(part => timePattern.test(part));
+        if (timeField) {
+          gunTime = timeField;
+        }
+      }
+      
+      // Extract places from ratio fields like "5/123"
+      let genderPlace = place;
+      let ageGroupPlace = place;
+      
+      if (columns.genderPlace !== undefined && parts[columns.genderPlace]) {
+        const match = parts[columns.genderPlace].match(/(\d+)\/\d+/);
+        if (match) genderPlace = parseInt(match[1]);
+      }
+      
+      if (columns.ageGroupPlace !== undefined && parts[columns.ageGroupPlace]) {
+        const match = parts[columns.ageGroupPlace].match(/(\d+)\/\d+/);
+        if (match) ageGroupPlace = parseInt(match[1]);
+      }
+      
+      if (!bibNumber || !firstName || !gunTime) {
+        console.warn('Missing required fields:', { bibNumber, firstName, gunTime, line: trimmed.substring(0, 50) });
+        return { result: null, runner: null };
+      }
+
+      const result: ScrapedRaceResult = {
+        bibNumber: bibNumber,
+        place: place,
+        placeGender: genderPlace,
+        placeAgeGroup: ageGroupPlace,
+        gunTime: this.normalizeTime(gunTime),
+        chipTime: undefined,
+        pacePerMile: '',
+        isDNF: false,
+        isDQ: false
+      };
+
+      const runner: ScrapedRunner = {
+        bibNumber: bibNumber,
+        firstName: firstName,
+        lastName: lastName,
+        gender: gender,
+        age: age
+      };
+
+      return { result, runner };
+
+    } catch (error) {
+      console.warn('Error parsing plain text line:', error, line.substring(0, 50));
+      return { result: null, runner: null };
+    }
+  }
+
+  /**
+   * Extract results from plain text format with dynamic column detection
    */
   private extractPlainTextResults(bodyText: string): { results: ScrapedRaceResult[], runners: ScrapedRunner[] } {
     const results: ScrapedRaceResult[] = [];
@@ -273,10 +705,13 @@ export class MCRRCScraper {
     try {
       const lines = bodyText.split('\n');
       
-      // Find the header line to understand column positions
-      const headerLineIndex = lines.findIndex(line => 
-        line.includes('Place') && line.includes('Sex/Tot') && line.includes('Name')
-      );
+      // Find the header line with flexible detection
+      const headerLineIndex = lines.findIndex(line => {
+        const lowerLine = line.toLowerCase();
+        return (lowerLine.includes('place') && 
+                (lowerLine.includes('name') || lowerLine.includes('nam')) &&
+                (lowerLine.includes('time') || lowerLine.includes('tim') || lowerLine.includes('gun')));
+      });
       
       if (headerLineIndex === -1) {
         console.warn('Could not find header line in plain text results');
@@ -285,36 +720,77 @@ export class MCRRCScraper {
 
       const headerLine = lines[headerLineIndex];
       console.log('Header line found:', headerLine);
-
-      // Find separator line (with ====)
-      const separatorLineIndex = lines.findIndex((line, index) => 
-        index > headerLineIndex && line.includes('=====')
-      );
-
-      if (separatorLineIndex === -1) {
-        console.warn('Could not find separator line in plain text results');
-        return { results, runners };
+      
+      // Try fixed-width parsing first (for formats with separator lines)
+      console.log('Attempting fixed-width column analysis...');
+      const fixedWidth = this.analyzeFixedWidthColumns(lines, headerLineIndex);
+      let isFixedWidth = false;
+      let columns: { [key: string]: number } = {};
+      
+      if (fixedWidth) {
+        console.log('Using fixed-width parsing');
+        isFixedWidth = true;
+      } else {
+        console.log('Using multi-space splitting parsing');
+        // Fallback to multi-space splitting
+        columns = this.analyzePlainTextColumns(headerLine);
       }
 
-      // Process result lines (after separator, before any footer content)
+      // Find separator line (with ====) or start parsing after header
+      let startLineIndex = headerLineIndex + 1;
+      const separatorLineIndex = lines.findIndex((line, index) => 
+        index > headerLineIndex && (line.includes('=====') || line.match(/^[\s=\-_]{10,}$/))
+      );
+      
+      if (separatorLineIndex !== -1) {
+        startLineIndex = separatorLineIndex + 1;
+        console.log('Found separator line at index:', separatorLineIndex);
+      } else {
+        console.log('No separator line found, starting parse after header');
+        // If no separator, skip any potential sub-header lines
+        while (startLineIndex < lines.length && 
+               lines[startLineIndex].trim() && 
+               !lines[startLineIndex].match(/^\s*\d+/)) {
+          startLineIndex++;
+        }
+      }
+
+      // Process result lines using dynamic parsing
       let resultCount = 0;
-      for (let i = separatorLineIndex + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
+      for (let i = startLineIndex; i < lines.length; i++) {
+        const rawLine = lines[i];
+        const trimmedLine = rawLine.trim();
         
         // Skip empty lines
-        if (!line) continue;
+        if (!trimmedLine) continue;
         
-        // Stop at footer content (Stay Informed, Email:, etc.)
-        if (line.includes('Stay Informed') || line.includes('Email:') || 
-            line.includes('Copyright') || line.includes('Terms & Conditions')) {
-          break;
+        // Stop at footer content or end markers (but do NOT stop on separator lines within the results)
+        if (trimmedLine.includes('Stay Informed') || trimmedLine.includes('Email:') || 
+            trimmedLine.includes('Copyright') || trimmedLine.includes('Terms & Conditions') ||
+            trimmedLine.toLowerCase().includes('results by') ||
+            trimmedLine.toLowerCase().includes('generated on') ||
+            trimmedLine.toLowerCase().includes('powered by')) {
+          continue;
+        }
+
+        // Skip separator-only lines (e.g., ======)
+        if (/^[\s=\-_]{10,}$/.test(trimmedLine)) {
+          continue;
         }
 
         // Skip lines that don't start with a number (place)
-        if (!/^\d+/.test(line)) continue;
+        if (!/^\d+/.test(trimmedLine)) continue;
 
         try {
-          const parsed = this.parsePlainTextResultLine(line);
+          // Use the appropriate parsing method based on format
+          let parsed;
+          if (isFixedWidth && fixedWidth) {
+            // IMPORTANT: pass the untrimmed line for fixed-width parsing to preserve alignment
+            parsed = this.parseFixedWidthLine(rawLine, fixedWidth.columns, fixedWidth.expectedLeadingSpaces);
+          } else {
+            parsed = this.parsePlainTextLine(trimmedLine, columns);
+          }
+          
           if (parsed.result && parsed.runner) {
             results.push(parsed.result);
             
@@ -326,12 +802,40 @@ export class MCRRCScraper {
             resultCount++;
           }
         } catch (error) {
-          console.warn(`Error parsing plain text line ${i}: "${line}"`, error);
+          console.warn(`Error parsing plain text line ${i}: "${trimmedLine}"`, error);
+        }
+      }
+
+      // Deduplicate results by bib number (keep first occurrence)
+      const uniqueResults: ScrapedRaceResult[] = [];
+      const uniqueRunners: ScrapedRunner[] = [];
+      const seenBibNumbers = new Set<string>();
+      const finalRunnerMap = new Map<string, ScrapedRunner>();
+      
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const bibNumber = result.bibNumber;
+        
+        // Skip duplicates - keep only the first occurrence
+        if (!seenBibNumbers.has(bibNumber)) {
+          seenBibNumbers.add(bibNumber);
+          uniqueResults.push(result);
+          
+          // Add corresponding runner
+          const runner = runnerMap.get(bibNumber);
+          if (runner && !finalRunnerMap.has(bibNumber)) {
+            finalRunnerMap.set(bibNumber, runner);
+            uniqueRunners.push(runner);
+          }
+        } else {
+          console.warn(`⚠️ Duplicate bib ${bibNumber} found - skipping duplicate result (place ${result.place})`);
         }
       }
 
       console.log(`Parsed ${resultCount} results from plain text format`);
-      return { results, runners };
+      console.log(`After deduplication: ${uniqueResults.length} unique results, ${uniqueRunners.length} unique runners`);
+      
+      return { results: uniqueResults, runners: uniqueRunners };
 
     } catch (error) {
       console.error('Error parsing plain text results:', error);
@@ -339,133 +843,7 @@ export class MCRRCScraper {
     }
   }
 
-  /**
-   * Parse a single line of plain text results
-   * Format: Place Sex/Tot Div/Tot Num Name S Ag Hometown Club Net_Time Pace Gun_Time Pace
-   */
-  private parsePlainTextResultLine(line: string): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
-    try {
-      // Use regex to parse the fixed-width format
-      // This regex attempts to capture the main fields from the fixed-width format
-      const regex = /^\s*(\d+)\s+(\d+\/\d+)\s+(\d+\/\d+)\s+(\d+)\s+(.+?)\s+([MF])\s+(\d+)\s+(.+?)\s+(\w*)\s+([\d:]+)\s+([\d:]+)\s+([\d:]+)\s+([\d:]+).*$/;
-      const match = line.match(regex);
-      
-      if (!match) {
-        // Try alternative parsing for lines that might have missing club or other variations
-        return this.parsePlainTextResultLineAlternative(line);
-      }
 
-      const [, place, sexTot, divTot, bib, name, gender, age, hometown, club, netTime, netPace, gunTime, gunPace] = match;
-
-      // Extract gender place from "1/265" format
-      const genderPlaceMatch = sexTot.match(/(\d+)\/\d+/);
-      const genderPlace = genderPlaceMatch ? parseInt(genderPlaceMatch[1]) : parseInt(place);
-
-      // Extract age group place from "1/26" format  
-      const ageGroupPlaceMatch = divTot.match(/(\d+)\/\d+/);
-      const ageGroupPlace = ageGroupPlaceMatch ? parseInt(ageGroupPlaceMatch[1]) : parseInt(place);
-
-      // Parse name into first and last
-      const nameParts = name.trim().split(' ');
-      const firstName = nameParts.shift() || '';
-      const lastName = nameParts.join(' ') || '';
-
-      const result: ScrapedRaceResult = {
-        bibNumber: bib.trim(),
-        place: parseInt(place),
-        placeGender: genderPlace,
-        placeAgeGroup: ageGroupPlace,
-        gunTime: this.normalizeTime(gunTime),
-        chipTime: this.normalizeTime(netTime),
-        pacePerMile: gunPace || netPace || '',
-        isDNF: false,
-        isDQ: false
-      };
-
-      const runner: ScrapedRunner = {
-        bibNumber: bib.trim(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        gender: (gender.trim() === 'M' ? 'M' : 'F') as 'M' | 'F',
-        age: parseInt(age) || 25,
-        club: club.trim() || undefined
-      };
-
-      return { result, runner };
-
-    } catch (error) {
-      console.warn('Error parsing plain text result line:', error);
-      return { result: null, runner: null };
-    }
-  }
-
-  /**
-   * Alternative parsing for plain text lines that don't match the main regex
-   */
-  private parsePlainTextResultLineAlternative(line: string): { result: ScrapedRaceResult | null, runner: ScrapedRunner | null } {
-    try {
-      // Split by whitespace and try to extract fields positionally
-      const parts = line.trim().split(/\s+/);
-      
-      if (parts.length < 8) {
-        return { result: null, runner: null };
-      }
-
-      const place = parseInt(parts[0]);
-      const bib = parts[3];
-      
-      // Find the gender field (should be M or F)
-      let genderIndex = -1;
-      for (let i = 4; i < parts.length; i++) {
-        if (parts[i] === 'M' || parts[i] === 'F') {
-          genderIndex = i;
-          break;
-        }
-      }
-
-      if (genderIndex === -1) {
-        return { result: null, runner: null };
-      }
-
-      const gender = parts[genderIndex] as 'M' | 'F';
-      const age = parseInt(parts[genderIndex + 1]) || 25;
-      
-      // Name is between bib and gender
-      const nameParts = parts.slice(4, genderIndex);
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      // Find time patterns (HH:MM:SS or MM:SS)
-      const timePattern = /^\d{1,2}:\d{2}(:\d{2})?$/;
-      const times = parts.filter(part => timePattern.test(part));
-      const gunTime = times.length > 0 ? times[times.length - 1] : '00:00:00'; // Take last time as gun time
-
-      const result: ScrapedRaceResult = {
-        bibNumber: bib,
-        place: place,
-        placeGender: place, // Fallback to overall place
-        placeAgeGroup: place, // Fallback to overall place
-        gunTime: this.normalizeTime(gunTime),
-        chipTime: this.normalizeTime(times[0] || gunTime),
-        pacePerMile: '', // Will be calculated later if needed
-        isDNF: false,
-        isDQ: false
-      };
-
-      const runner: ScrapedRunner = {
-        bibNumber: bib,
-        firstName: firstName,
-        lastName: lastName,
-        gender: gender,
-        age: age
-      };
-
-      return { result, runner };
-
-    } catch (error) {
-      return { result: null, runner: null };
-    }
-  }
 
 
 

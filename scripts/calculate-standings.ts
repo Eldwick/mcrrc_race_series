@@ -10,6 +10,7 @@
  *   npx tsx scripts/calculate-standings.ts
  */
 
+import 'dotenv/config';
 import { calculateMCRRCStandings } from '../lib/db/utils.js';
 import { getSql } from '../lib/db/connection.js';
 

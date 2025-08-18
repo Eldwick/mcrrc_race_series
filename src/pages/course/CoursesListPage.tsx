@@ -127,12 +127,6 @@ export function CoursesListPage() {
               <div className="text-sm text-gray-600">Total Races</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600 mb-1">
-                {courses.reduce((sum, course) => sum + (course.statistics?.yearsHeld || 0), 0)}
-              </div>
-              <div className="text-sm text-gray-600">Total Years</div>
-            </div>
-            <div className="text-center">
               <div className="text-2xl font-bold text-purple-600 mb-1">
                 {courses.reduce((sum, course) => sum + (course.statistics?.totalParticipants || 0), 0)}
               </div>

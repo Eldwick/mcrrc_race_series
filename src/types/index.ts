@@ -26,6 +26,8 @@ export interface Race {
   isOfficial: boolean;
   raceUrl?: string;
   resultsUrl?: string;
+  raceCourseId?: string;
+  raceCourseName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -194,6 +196,7 @@ export interface CourseRace {
 }
 
 export interface CourseRecord {
+  raceId?: string;
   year: number;
   raceName: string;
   raceDate: string;

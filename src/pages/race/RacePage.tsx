@@ -214,6 +214,17 @@ export function RacePage() {
                 <p className="text-sm text-gray-500 mt-2">
                   Access the original race results page for additional details and timing information.
                 </p>
+                {race.raceCourseId && (
+                  <div className="mt-4">
+                    <Link
+                      to={`/course/${race.raceCourseId}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-700 hover:text-gray-900 transition-colors font-medium"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      View Course{race.raceCourseName ? `: ${race.raceCourseName}` : ''}
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </div>

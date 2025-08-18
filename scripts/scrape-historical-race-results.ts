@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+
 /**
  * Scrape Historical Race Results
  * 
@@ -15,6 +16,7 @@
 
 import { getSql } from '../lib/db/connection.js';
 import { MCRRCScraper } from '../lib/scraping/mcrrc-scraper.js';
+import 'dotenv/config';
 
 // Historical race URLs discovered by the scraping script
 const BASED_HISTORICAL_RACE_RESULT_URL_OUTPUT = [
@@ -514,8 +516,8 @@ async function main() {
   
   if (args.includes('--2023-only')) {
     targetYears = [2023];
-  } else if (args.includes('--2023-and-before')) {
-    targetYears = Array.from({length: 24}, (_, i) => 2023 - i); // 2023 down to 2000
+  } else if (args.includes('--2024-and-before')) {
+    targetYears = Array.from({length: 25}, (_, i) => 2024 - i); // 2024 down to 2000
   } else if (args.includes('--recent')) {
     targetYears = [2024, 2023, 2022, 2021, 2020]; // Last 5 years
   }

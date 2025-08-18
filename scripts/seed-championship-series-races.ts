@@ -12,7 +12,7 @@
  * Environment:
  *   DATABASE_URL - PostgreSQL connection string (required)
  */
-
+import 'dotenv/config';
 import { getSql } from '../lib/db/connection';
 import { mcrrcScraper } from '../lib/scraping/mcrrc-scraper';
 

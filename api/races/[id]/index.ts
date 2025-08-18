@@ -55,6 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       distanceMiles: race.distance_miles,
       location: race.location,
       courseType: race.course_type,
+      raceCourseId: (race as any).race_course_id || null,
+      raceCourseName: (race as any).race_course_name || null,
       mcrrcUrl: race.mcrrc_url,
       createdAt: race.created_at,
       updatedAt: race.updated_at,
