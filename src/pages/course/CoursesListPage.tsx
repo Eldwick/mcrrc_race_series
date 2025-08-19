@@ -86,14 +86,6 @@ export function CoursesListPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Race Courses</h1>
-        <p className="text-gray-600 mt-1">
-          Explore MCRRC race courses and their multi-year history
-        </p>
-      </div>
-
       {/* Course Summary Stats */}
       <Card>
         <CardContent className="p-6">
