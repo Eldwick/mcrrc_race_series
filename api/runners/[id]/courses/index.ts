@@ -38,10 +38,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get all runner results
     const allResults = await getRunnerResults(runnerId);
     
-    // Filter valid results and group by course (using race name as course identifier)
+    // Filter valid results and group by course
     const validResults = allResults.filter(result => !result.is_dnf && !result.is_dq);
     
-    // Group by race_course_id (actual course identifier)
+    // Group by race_course_id (the proper way)
     const courseGroups = new Map();
     validResults.forEach(result => {
       const courseKey = result.race_course_id || result.race_name || 'unknown-course';
@@ -51,15 +51,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       courseGroups.get(courseKey).push(result);
     });
     
-    // Helper function to convert time string to seconds
-    const convertTimeToSeconds = (timeStr: string): number => {
-      if (!timeStr) return Infinity;
-      const parts = timeStr.toString().split(':');
-      if (parts.length === 2) {
-        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
-      } else if (parts.length === 3) {
-        return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+    // Helper function to convert time to seconds (handles both string and object formats)
+    const convertTimeToSeconds = (time: any): number => {
+      if (!time) return Infinity;
+      
+      // Handle object format: {minutes: 10, seconds: 34, hours?: 1}
+      if (typeof time === 'object' && time.minutes !== undefined) {
+        const hours = time.hours || 0;
+        const minutes = time.minutes || 0;
+        const seconds = time.seconds || 0;
+        return hours * 3600 + minutes * 60 + seconds;
       }
+      
+      // Handle string format: "10:34" or "1:10:34"
+      if (typeof time === 'string') {
+        const parts = time.split(':');
+        if (parts.length === 2) {
+          return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        } else if (parts.length === 3) {
+          return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        }
+      }
+      
       return Infinity;
     };
     

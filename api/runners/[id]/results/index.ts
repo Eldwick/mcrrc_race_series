@@ -62,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: result.race_name,
         date: result.race_date,
         distanceMiles: result.distance_miles,
+        courseId: result.race_course_id,
       },
       // Runner information from series registration
       age: result.age,
