@@ -185,6 +185,18 @@ export const api = {
     }));
   },
 
+  // Get runner lifetime statistics across all years and race series
+  async getRunnerStatistics(runnerId: string): Promise<any> {
+    const response = await apiCall<{ data: any }>(`/runners/${runnerId}/statistics`);
+    return response.data;
+  },
+
+  // Get runner course statistics (how many times run each course, fastest times, etc.)
+  async getRunnerCourseStatistics(runnerId: string): Promise<any[]> {
+    const response = await apiCall<{ data: any[]; count: number }>(`/runners/${runnerId}/courses`);
+    return response.data;
+  },
+
   // Get available years (for year selector)
   async getAvailableYears(): Promise<number[]> {
     const response = await apiCall<{ data: number[]; count: number }>('/races/years');
@@ -299,7 +311,7 @@ export const api = {
       overallRank: standing.overallRank ?? standing.overall_rank ?? (index + 1),
       genderRank: standing.genderRank ?? standing.gender_rank,
       ageGroupRank: standing.ageGroupRank ?? standing.age_group_rank,
-      qualifyingRacesNeeded: standing.qualifyingRaces ?? standing.qualifying_races ?? 0,
+      qualifyingRacesNeeded: standing.qualifyingRacesNeeded ?? standing.qualifying_races ?? 0,
       qualifyingRaces: [], // TODO: Load actual qualifying races data
       raceScores: standing.raceScores ?? [],
       lastCalculatedAt: standing.lastCalculatedAt || standing.last_calculated_at || new Date().toISOString(),

@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         overallPoints: standing.overall_points,
         ageGroupPoints: standing.age_group_points,
         racesParticipated: standing.races_participated,
+        qualifyingRacesNeeded: standing.qualifying_races || 6, // Q = half of total series races, rounded up
         overallRank: standing.overall_rank || (index + 1),
         genderRank: standing.gender_rank,
         ageGroupRank: standing.age_group_rank,

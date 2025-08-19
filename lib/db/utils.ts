@@ -399,6 +399,7 @@ export async function getRunnerResults(runnerId: string, year?: number): Promise
         ra.name as race_name, 
         ra.date as race_date, 
         ra.distance_miles,
+        ra.race_course_id,
         sr.bib_number,
         sr.age,
         sr.age_group
@@ -415,6 +416,7 @@ export async function getRunnerResults(runnerId: string, year?: number): Promise
         ra.name as race_name, 
         ra.date as race_date, 
         ra.distance_miles,
+        ra.race_course_id,
         sr.bib_number,
         sr.age,
         sr.age_group
