@@ -4,6 +4,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { getSql } from '../db/connection.js';
+import { validateRunner, validateRaceResult, sanitizeRunner, normalizeRunnerName } from './data-validation.js';
 
 export interface ScrapedRunner {
   bibNumber: string;
@@ -1205,7 +1206,28 @@ export class MCRRCScraper {
         runner.club = club.trim();
       }
 
-      return runner;
+      // Validate the runner data before returning
+      const validation = validateRunner(runner);
+      if (!validation.isValid) {
+        console.warn('⚠️  Skipping invalid runner data:', {
+          runner: `${firstName} ${lastName}`,
+          errors: validation.errors,
+          warnings: validation.warnings
+        });
+        return null;
+      }
+
+      // Show warnings but continue processing
+      if (validation.warnings.length > 0) {
+        console.warn('⚠️  Runner data warnings:', {
+          runner: `${firstName} ${lastName}`,
+          warnings: validation.warnings
+        });
+      }
+
+      // Sanitize the data
+      const sanitizedRunner = sanitizeRunner(runner);
+      return sanitizedRunner;
     } catch (error) {
       console.warn('Error parsing runner row:', error);
       return null;
@@ -1706,8 +1728,9 @@ export class MCRRCScraper {
     
     // Pre-process all runners to get/create runner IDs and prepare for bulk operations
     for (const runner of runners) {
-      const fullName = `${runner.firstName}|${runner.lastName}`.toLowerCase();
-      let runnerId = runnerCache.get(fullName);
+      // Use normalized name for better duplicate detection
+      const normalizedName = normalizeRunnerName(runner.firstName, runner.lastName);
+      let runnerId = runnerCache.get(normalizedName);
       
       if (!runnerId) {
         // Calculate birth year more accurately by subtracting age from race date
@@ -1715,10 +1738,12 @@ export class MCRRCScraper {
         const approximateBirthDate = new Date(raceDateObj.getFullYear() - runner.age, raceDateObj.getMonth(), raceDateObj.getDate());
         const birthYear = approximateBirthDate.getFullYear();
         
-        // Check if runner exists
+        // Check if runner exists - use improved matching
         const existingRunner = await sql`
-          SELECT id FROM runners 
-          WHERE LOWER(first_name) = LOWER(${runner.firstName}) AND LOWER(last_name) = LOWER(${runner.lastName})
+          SELECT id, first_name, last_name FROM runners 
+          WHERE LOWER(TRIM(first_name)) = LOWER(TRIM(${runner.firstName})) 
+            AND LOWER(TRIM(last_name)) = LOWER(TRIM(${runner.lastName}))
+            AND (is_active IS NULL OR is_active = true)
         ` as any[];
 
         if (existingRunner.length > 0) {
@@ -1743,7 +1768,7 @@ export class MCRRCScraper {
           runnersCreated++;
         }
         
-        runnerCache.set(fullName, runnerId!);
+        runnerCache.set(normalizedName, runnerId!);
       }
 
       // Update the bib-to-runner mapping for registration upserts

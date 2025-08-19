@@ -11,8 +11,7 @@ export default defineConfig({
     globals: true,
     setupFiles: []
   },
-  // Include HTML files as assets to prevent import analysis
-  assetsInclude: ['**/*.html'],
+
   server: {
     proxy: {
       '/api': {
