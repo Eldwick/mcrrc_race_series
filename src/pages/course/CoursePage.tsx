@@ -7,7 +7,7 @@ import {
   Clock, 
   Loader2, 
   Award,
-  TrendingUp,
+
   ExternalLink,
   Target,
   Mountain,
@@ -653,12 +653,6 @@ export function CoursePage() {
                       <div className="text-sm font-medium">
                         PR: {formatTime(pr.statistics.personalBest)}
                       </div>
-                      {pr.statistics.improvement > 0 && (
-                        <div className="text-xs text-green-600">
-                          <TrendingUp className="w-3 h-3 inline mr-1" />
-                          Improved {Math.round(pr.statistics.improvement)}s
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
