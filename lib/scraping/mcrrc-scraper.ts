@@ -726,9 +726,9 @@ export class MCRRCScraper {
       if (!gunTime && allTimes.length === 1) gunTime = allTimes[0];
 
       // Allow explicit mapped columns to override if present
-      const extractFirstTime = (s: string): string => {
+      const extractFirstTime = (s: string | undefined): string => {
         const m = s?.match(timePatternGlobal) || [];
-        return m.length > 0 ? m[0] : '';
+        return m.length > 0 ? (m[0] || '') : '';
       };
       if (columns.gunTime !== undefined && parts[columns.gunTime]) {
         const mappedGun = extractFirstTime(parts[columns.gunTime]);
@@ -749,8 +749,8 @@ export class MCRRCScraper {
 
       // Final guard: avoid mistakenly using pace/net as gun time
       if (gunTime && (gunTime === paceStr || (netTime && gunTime === netTime))) {
-        if (allTimes.length >= 3) gunTime = allTimes[allTimes.length - 3];
-        else if (allTimes.length >= 2) gunTime = allTimes[0];
+        if (allTimes.length >= 3) gunTime = allTimes[allTimes.length - 3] || '';
+        else if (allTimes.length >= 2) gunTime = allTimes[0] || '';
       }
       
       // As last resort for gun time, scan other fields including club
@@ -1514,7 +1514,7 @@ export class MCRRCScraper {
       const { MCRRCScraperOptimized } = await import('./mcrrc-scraper-optimized.js');
       const optimizedScraper = new MCRRCScraperOptimized();
       
-      const runnerProcessingResult = await optimizedScraper.storeRunnersDataOptimizedV2(sql, scrapedRace.runners, seriesId);
+      const runnerProcessingResult = await optimizedScraper.storeRunnersDataOptimizedV2(sql, scrapedRace.runners, seriesId, scrapedRace.date);
       console.log(`   ✨ Created ${runnerProcessingResult.runnersCreated} new runners, 🔄 updated ${runnerProcessingResult.runnersUpdated} existing runners`);
       console.log(`   📝 Processed ${runnerProcessingResult.registrationsProcessed} registrations`);
       
@@ -1544,10 +1544,11 @@ export class MCRRCScraper {
   /**
    * Store or update runner data (idempotent)
    */
-  private async storeRunnerData(sql: any, runner: ScrapedRunner, seriesId: string): Promise<{created: boolean, updated: boolean}> {
-    // Calculate birth year from age (approximate) - age is now guaranteed to exist
-    const currentYear = new Date().getFullYear();
-    const birthYear = currentYear - runner.age;
+  private async storeRunnerData(sql: any, runner: ScrapedRunner, seriesId: string, raceDate: string): Promise<{created: boolean, updated: boolean}> {
+    // Calculate birth year more accurately by subtracting age from race date
+    const raceDateObj = new Date(raceDate);
+    const approximateBirthDate = new Date(raceDateObj.getFullYear() - runner.age, raceDateObj.getMonth(), raceDateObj.getDate());
+    const birthYear = approximateBirthDate.getFullYear();
     
     // Calculate age group - age is now guaranteed to exist
     const ageGroup = this.getAgeGroup(runner.age);
@@ -1679,7 +1680,7 @@ export class MCRRCScraper {
   /**
    * OPTIMIZED: Store runner data in batch with optimized conflict resolution
    */
-  private async storeRunnersDataOptimized(sql: any, runners: ScrapedRunner[], seriesId: string): Promise<{
+  private async storeRunnersDataOptimized(sql: any, runners: ScrapedRunner[], seriesId: string, raceDate: string): Promise<{
     runnersCreated: number;
     runnersUpdated: number;
     conflictsResolved: number;
@@ -1709,9 +1710,10 @@ export class MCRRCScraper {
       let runnerId = runnerCache.get(fullName);
       
       if (!runnerId) {
-        // Calculate values needed for runner
-        const currentYear = new Date().getFullYear();
-        const birthYear = currentYear - runner.age;
+        // Calculate birth year more accurately by subtracting age from race date
+        const raceDateObj = new Date(raceDate);
+        const approximateBirthDate = new Date(raceDateObj.getFullYear() - runner.age, raceDateObj.getMonth(), raceDateObj.getDate());
+        const birthYear = approximateBirthDate.getFullYear();
         
         // Check if runner exists
         const existingRunner = await sql`

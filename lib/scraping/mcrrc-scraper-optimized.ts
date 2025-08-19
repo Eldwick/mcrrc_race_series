@@ -247,7 +247,8 @@ export class MCRRCScraperOptimized {
       age: number;
       club?: string;
     }>, 
-    seriesId: string
+    seriesId: string,
+    raceDate: string
   ): Promise<{
     runnersCreated: number;
     runnersUpdated: number;
@@ -284,7 +285,7 @@ export class MCRRCScraperOptimized {
     // OPTIMIZATION 3: Bulk create new runners
     let runnersCreated = 0;
     if (newRunners.length > 0) {
-      runnersCreated = await this.bulkCreateRunners(sql, newRunners);
+      runnersCreated = await this.bulkCreateRunners(sql, newRunners, raceDate);
       console.log(`   ✨ Bulk created ${runnersCreated} new runners`);
     }
 
@@ -362,10 +363,10 @@ export class MCRRCScraperOptimized {
   /**
    * Bulk create new runners (using individual inserts for Neon SQL compatibility)
    */
-  private async bulkCreateRunners(sql: any, runners: Array<any>): Promise<number> {
+  private async bulkCreateRunners(sql: any, runners: Array<any>, raceDate: string): Promise<number> {
     if (runners.length === 0) return 0;
 
-    const currentYear = new Date().getFullYear();
+    const raceYear = new Date(raceDate).getFullYear();
     let created = 0;
     
     // Process in smaller batches for better performance
@@ -374,7 +375,11 @@ export class MCRRCScraperOptimized {
     for (let i = 0; i < runners.length; i += BATCH_SIZE) {
       const batch = runners.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (runner) => {
-        const birthYear = currentYear - runner.age;
+        // Calculate birth year more accurately by subtracting age from race date
+        const raceDateObj = new Date(raceDate);
+        const approximateBirthDate = new Date(raceDateObj.getFullYear() - runner.age, raceDateObj.getMonth(), raceDateObj.getDate());
+        const birthYear = approximateBirthDate.getFullYear();
+        
         await sql`
           INSERT INTO runners (first_name, last_name, gender, birth_year, club)
           VALUES (${runner.firstName}, ${runner.lastName}, ${runner.gender}, ${birthYear}, ${runner.club || null})
