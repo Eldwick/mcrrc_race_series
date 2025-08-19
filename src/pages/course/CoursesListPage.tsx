@@ -9,7 +9,7 @@ import {
   Target,
   TrendingUp
 } from 'lucide-react';
-import { Card, CardContent, Badge } from '../../components/ui';
+import { Card, CardContent } from '../../components/ui';
 import type { RaceCourse } from '../../types';
 
 export function CoursesListPage() {
@@ -41,23 +41,7 @@ export function CoursesListPage() {
     fetchCourses();
   }, []);
 
-  const getCourseTypeIcon = (courseType: string) => {
-    switch (courseType) {
-      case 'trail': return '🌲';
-      case 'track': return '🏃‍♂️';
-      case 'cross-country': return '🏞️';
-      default: return '🛣️';
-    }
-  };
 
-  const getCourseTypeColor = (courseType: string) => {
-    switch (courseType) {
-      case 'trail': return 'bg-green-100 text-green-800';
-      case 'track': return 'bg-purple-100 text-purple-800';
-      case 'cross-country': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-blue-100 text-blue-800';
-    }
-  };
 
   if (loading) {
     return (
@@ -154,44 +138,24 @@ export function CoursesListPage() {
               <Link key={course.id} to={`/course/${course.id}`}>
                 <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
                   <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-xl">{getCourseTypeIcon(course.courseType)}</span>
-                          <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
-                            {course.name}
-                          </h3>
-                        </div>
-                        {course.shortName && (
-                          <p className="text-sm text-gray-600 mb-2">{course.shortName}</p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                          {course.location && (
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-4 h-4" />
-                              <span className="line-clamp-1">{course.location}</span>
-                            </div>
-                          )}
-                          {course.typicalDistance && (
-                            <div className="flex items-center gap-1">
-                              <Target className="w-4 h-4" />
-                              {course.typicalDistance} miles
-                            </div>
-                          )}
-                        </div>
+                    <div className="mb-4">
+                      <div className="mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900 line-clamp-1">
+                          {course.name}
+                        </h3>
                       </div>
-                      
-                      <div className="flex flex-col items-end gap-2">
-                        <Badge 
-                          className={getCourseTypeColor(course.courseType)}
-                          size="sm"
-                        >
-                          {course.courseType}
-                        </Badge>
-                        {course.establishedYear && (
-                          <span className="text-xs text-gray-500">
-                            Est. {course.establishedYear}
-                          </span>
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                        {course.location && (
+                          <div className="flex items-center gap-1">
+                            <MapPin className="w-4 h-4" />
+                            <span className="line-clamp-1">{course.location}</span>
+                          </div>
+                        )}
+                        {course.typicalDistance && (
+                          <div className="flex items-center gap-1">
+                            <Target className="w-4 h-4" />
+                            {course.typicalDistance} miles
+                          </div>
                         )}
                       </div>
                     </div>

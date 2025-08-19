@@ -111,14 +111,7 @@ export function CoursePage() {
 
 
 
-  const getCourseTypeIcon = (courseType: string) => {
-    switch (courseType) {
-      case 'trail': return '🌲';
-      case 'track': return '🏃‍♂️';
-      case 'cross-country': return '🏞️';
-      default: return '🛣️';
-    }
-  };
+
 
   // Filter handlers for course records
   const handleRecordGenderChange = (gender: 'all' | 'M' | 'F') => {
@@ -233,8 +226,7 @@ export function CoursePage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-2xl">{getCourseTypeIcon(course.courseType)}</span>
+          <div className="mb-2">
             <h1 className="text-3xl font-bold text-gray-900">{course.name}</h1>
           </div>
           {course.shortName && (
@@ -253,13 +245,6 @@ export function CoursePage() {
                 {course.typicalDistance} miles
               </div>
             )}
-            {course.establishedYear && (
-              <div className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                Est. {course.establishedYear}
-              </div>
-            )}
-            <Badge variant="secondary">{course.courseType}</Badge>
           </div>
           {course.description && (
             <p className="text-gray-700 mt-3">{course.description}</p>
