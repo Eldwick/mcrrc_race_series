@@ -5,8 +5,9 @@
  * 
  * This script:
  * 1. Identifies potential duplicate runners based on name similarity
- * 2. Merges their race results and registrations
- * 3. Deactivates the duplicate runner records
+ * 2. Selects primary runner based on most recent race series participation
+ * 3. Merges their race results and registrations into the primary runner
+ * 4. Deactivates the duplicate runner records
  * 
  * Usage: npx tsx scripts/fix-duplicate-runners.ts
  */
@@ -23,6 +24,7 @@ interface RunnerRecord {
   is_active: boolean;
   created_at: string;
   race_count: number;
+  latest_series_year: number | null;
 }
 
 interface DuplicateGroup {
@@ -35,14 +37,16 @@ async function findDuplicateRunners(): Promise<DuplicateGroup[]> {
   
   console.log('🔍 Finding potential duplicate runners...');
   
-  // Get all active runners with their race counts
+  // Get all active runners with their race counts and latest series year
   const allRunners = await sql`
     SELECT 
       r.*,
-      COUNT(DISTINCT rr.id) as race_count
+      COUNT(DISTINCT rr.id) as race_count,
+      MAX(s.year) as latest_series_year
     FROM runners r
     LEFT JOIN series_registrations sr ON r.id = sr.runner_id
     LEFT JOIN race_results rr ON sr.id = rr.series_registration_id
+    LEFT JOIN series s ON sr.series_id = s.id
     WHERE (r.is_active IS NULL OR r.is_active = true)
       AND r.first_name != ''
       AND r.last_name != ''
@@ -99,9 +103,20 @@ async function mergeDuplicateRunners(group: DuplicateGroup): Promise<void> {
   console.log(`\n🔀 Processing duplicate group: ${group.key}`);
   console.log(`   Runners found: ${group.runners.length}`);
   
-  // Sort runners to keep the "best" one (most races, oldest created_at)
+  // Sort runners to keep the "best" one (most recent series year, then most races, then oldest created_at)
   const sortedRunners = group.runners.sort((a, b) => {
-    // Prefer runner with more races
+    // Prefer runner from most recent series year (null values go to end)
+    if (a.latest_series_year === null && b.latest_series_year === null) {
+      // Both null, continue to next criteria
+    } else if (a.latest_series_year === null) {
+      return 1; // a goes to end
+    } else if (b.latest_series_year === null) {
+      return -1; // b goes to end
+    } else if (b.latest_series_year !== a.latest_series_year) {
+      return b.latest_series_year - a.latest_series_year; // Higher year first
+    }
+    
+    // If same/null series year, prefer runner with more races
     if (b.race_count !== a.race_count) {
       return b.race_count - a.race_count;
     }
@@ -112,51 +127,80 @@ async function mergeDuplicateRunners(group: DuplicateGroup): Promise<void> {
   const primaryRunner = sortedRunners[0];
   const duplicateRunners = sortedRunners.slice(1);
   
-  console.log(`   🎯 Keeping primary: ${primaryRunner.first_name} ${primaryRunner.last_name} (ID: ${primaryRunner.id}, Races: ${primaryRunner.race_count})`);
+  if (duplicateRunners.length === 0) {
+    console.log(`   ℹ️  No duplicates to merge for ${primaryRunner.first_name} ${primaryRunner.last_name}`);
+    return;
+  }
   
-  // Merge each duplicate into the primary runner
-  for (const duplicate of duplicateRunners) {
-    console.log(`   🗑️  Merging: ${duplicate.first_name} ${duplicate.last_name} (ID: ${duplicate.id}, Races: ${duplicate.race_count})`);
+  console.log(`   🎯 Keeping primary: ${primaryRunner.first_name} ${primaryRunner.last_name} (ID: ${primaryRunner.id}, Latest Series: ${primaryRunner.latest_series_year}, Races: ${primaryRunner.race_count})`);
+  duplicateRunners.forEach(duplicate => {
+    console.log(`   🗑️  Will merge: ${duplicate.first_name} ${duplicate.last_name} (ID: ${duplicate.id}, Series: ${duplicate.latest_series_year}, Races: ${duplicate.race_count})`);
+  });
+  
+  // Collect all duplicate IDs for bulk operations
+  const duplicateIds = duplicateRunners.map(r => r.id);
+  
+  try {
+    // Execute bulk operations (Neon serverless doesn't support explicit transactions)
+    // But individual operations are atomic and we handle errors gracefully
     
-    try {
-      // Update series_registrations to point to primary runner
-      await sql`
-        UPDATE series_registrations 
-        SET runner_id = ${primaryRunner.id}
-        WHERE runner_id = ${duplicate.id}
-      `;
-      
-      // Update any race_results that might directly reference the runner
-      await sql`
-        UPDATE race_results rr
-        SET series_registration_id = (
-          SELECT sr.id 
-          FROM series_registrations sr 
-          WHERE sr.runner_id = ${primaryRunner.id} 
-            AND sr.series_id = (
-              SELECT sr2.series_id 
-              FROM series_registrations sr2 
-              WHERE sr2.id = rr.series_registration_id
-            )
-          LIMIT 1
+    // 1. Bulk update series_registrations to point to primary runner
+    await sql`
+      UPDATE series_registrations 
+      SET runner_id = ${primaryRunner.id}, updated_at = NOW()
+      WHERE runner_id = ANY(${duplicateIds})
+    `;
+    console.log(`   📋 Updated ${duplicateIds.length} runners' series registrations`);
+    
+    // 2. Handle potential duplicate series registrations by merging them
+    // First, identify and handle duplicate series registrations that might now exist
+    await sql`
+      DELETE FROM series_registrations sr1
+      WHERE sr1.runner_id = ${primaryRunner.id}
+        AND EXISTS (
+          SELECT 1 FROM series_registrations sr2 
+          WHERE sr2.runner_id = ${primaryRunner.id} 
+            AND sr2.series_id = sr1.series_id 
+            AND sr2.id > sr1.id
         )
-        WHERE series_registration_id IN (
-          SELECT id FROM series_registrations WHERE runner_id = ${duplicate.id}
-        )
-      `;
-      
-      // Deactivate the duplicate runner
-      await sql`
-        UPDATE runners 
-        SET is_active = false, 
-            updated_at = NOW()
-        WHERE id = ${duplicate.id}
-      `;
-      
-      console.log(`     ✅ Merged duplicate runner successfully`);
-    } catch (error) {
-      console.error(`     ❌ Error merging ${duplicate.id}:`, error);
-    }
+    `;
+    console.log(`   🧹 Cleaned up duplicate series registrations`);
+    
+    // 3. Update race_results to point to the correct series_registration
+    // This handles any orphaned race_results that might exist
+    await sql`
+      UPDATE race_results rr
+      SET series_registration_id = (
+        SELECT sr.id 
+        FROM series_registrations sr 
+        WHERE sr.runner_id = ${primaryRunner.id} 
+          AND sr.series_id = (
+            SELECT sr_old.series_id 
+            FROM series_registrations sr_old 
+            WHERE sr_old.id = rr.series_registration_id
+          )
+        LIMIT 1
+      )
+      WHERE series_registration_id IN (
+        SELECT id FROM series_registrations 
+        WHERE runner_id = ANY(${duplicateIds})
+      )
+    `;
+    console.log(`   🏃 Updated race results references`);
+    
+    // 4. Bulk deactivate duplicate runners
+    await sql`
+      UPDATE runners 
+      SET is_active = false, updated_at = NOW()
+      WHERE id = ANY(${duplicateIds})
+    `;
+    console.log(`   🚫 Deactivated ${duplicateIds.length} duplicate runners`);
+    
+    console.log(`   ✅ Successfully merged ${duplicateIds.length} duplicate runners into primary`);
+    
+  } catch (error) {
+    console.error(`   ❌ Error during bulk merge operation:`, error);
+    throw error;
   }
 }
 
@@ -201,21 +245,31 @@ async function main() {
     // Then find and merge duplicates
     const duplicateGroups = await findDuplicateRunners();
     
+    // Calculate total runners that will be processed
+    let totalDuplicatesToMerge = 0;
+    duplicateGroups.forEach(group => {
+      if (group.runners.length > 1) {
+        totalDuplicatesToMerge += group.runners.length - 1; // -1 because we keep one as primary
+      }
+    });
+    
     if (duplicateGroups.length === 0) {
       console.log('✅ No duplicate runners found!');
       return;
     }
     
     console.log('\n📋 Duplicate groups found:');
+    console.log(`📊 Will process ${duplicateGroups.length} duplicate groups, merging ${totalDuplicatesToMerge} duplicate runners\n`);
+    
     duplicateGroups.forEach((group, index) => {
       console.log(`${index + 1}. ${group.key} (${group.runners.length} runners)`);
       group.runners.forEach(runner => {
-        console.log(`   - ${runner.first_name} ${runner.last_name} (${runner.race_count} races) - ${runner.id}`);
+        console.log(`   - ${runner.first_name} ${runner.last_name} (${runner.race_count} races, Series: ${runner.latest_series_year || 'None'}, Birth: ${runner.birth_year || 'Unknown'}) - ${runner.id}`);
       });
     });
     
     // Ask for confirmation before proceeding
-    console.log('\n⚠️  This will merge duplicate runners. Continue? (y/N)');
+    console.log(`\n⚠️  This will merge ${totalDuplicatesToMerge} duplicate runners across ${duplicateGroups.length} groups. Continue? (y/N)`);
     
     // For script automation, you can uncomment the next line to auto-proceed
     // const proceed = 'y';
@@ -232,10 +286,24 @@ async function main() {
       return;
     }
     
-    // Process each duplicate group
-    for (const group of duplicateGroups) {
+    // Process duplicate groups with progress tracking
+    // Note: Processing sequentially to avoid potential foreign key conflicts
+    // when multiple groups might reference the same series/races
+    console.log('\n🔄 Starting merge operations...');
+    const startTime = Date.now();
+    
+    for (let i = 0; i < duplicateGroups.length; i++) {
+      const group = duplicateGroups[i];
+      console.log(`\n📊 Processing group ${i + 1}/${duplicateGroups.length}`);
       await mergeDuplicateRunners(group);
     }
+    
+    const endTime = Date.now();
+    const totalSeconds = (endTime - startTime) / 1000;
+    console.log(`\n⏱️  Total merge time: ${totalSeconds.toFixed(2)} seconds`);
+    console.log(`📈 Average time per group: ${(totalSeconds / duplicateGroups.length).toFixed(2)} seconds`);
+    console.log(`🎯 Total duplicate runners merged: ${totalDuplicatesToMerge}`);
+    console.log(`📊 Duplicate groups processed: ${duplicateGroups.length}`);
     
     console.log('\n✅ Duplicate runner cleanup completed!');
     

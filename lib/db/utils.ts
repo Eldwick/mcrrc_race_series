@@ -1002,7 +1002,7 @@ async function calculateSeriesRankings(seriesId: string, year: number): Promise<
 
 // Helper function to convert PostgreSQL interval to seconds
 function intervalToSecondsFromDb(interval: any): number {
-  if (typeof interval === 'object' && interval.minutes !== undefined) {
+  if (typeof interval === 'object' && (interval.hours !== undefined || interval.minutes !== undefined || interval.seconds !== undefined)) {
     const hours = interval.hours || 0;
     const minutes = interval.minutes || 0; 
     const seconds = interval.seconds || 0;
@@ -1016,7 +1016,7 @@ export function formatTimeFromInterval(interval: any): string {
   if (!interval) return '-';
   
   // Handle PostgresInterval objects
-  if (typeof interval === 'object' && interval.minutes !== undefined) {
+  if (typeof interval === 'object' && (interval.hours !== undefined || interval.minutes !== undefined || interval.seconds !== undefined)) {
     const hours = interval.hours || 0;
     const minutes = interval.minutes || 0;
     const seconds = interval.seconds || 0;

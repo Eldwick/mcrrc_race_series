@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!time) return Infinity;
       
       // Handle object format: {minutes: 10, seconds: 34, hours?: 1}
-      if (typeof time === 'object' && time.minutes !== undefined) {
+      if (typeof time === 'object' && (time.hours !== undefined || time.minutes !== undefined || time.seconds !== undefined)) {
         const hours = time.hours || 0;
         const minutes = time.minutes || 0;
         const seconds = time.seconds || 0;
